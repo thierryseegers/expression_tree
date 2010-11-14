@@ -71,7 +71,7 @@ private:
 
 	//!\brief Leaf class.
 	//!
-	//! This class stores data.
+	//! This class stores a copy of its data.
 	template<typename U>
 	class leaf : public node_impl<U>
 	{
@@ -86,6 +86,25 @@ private:
 		virtual U evaluate() const
 		{
 			return d;
+		}
+	};
+
+	//!\brief Leaf class specialized to U*.
+	//!
+	//! This class stores a pointer to data.
+	template<typename U>
+	class leaf<U*> : public node_impl<U>
+	{
+		const U *d;		//!< This node's pointer to data.
+
+	public:
+		leaf(const U* d) : d(d) {}
+
+		virtual ~leaf() {}
+
+		virtual U evaluate() const
+		{
+			return *d;
 		}
 	};
 
@@ -159,6 +178,22 @@ public:
 			return *this;
 		}
 
+		//!\brief Assign a pointer to this node.
+		//!
+		//! This designates this node as a leaf node.
+		//! A node can still become a branch node by assigning an operation to it.
+		node<U>& operator=(const U* t)
+		{
+			if(i)
+			{
+				delete i;
+			}
+
+			i = new leaf<U*>(t);
+
+			return *this;
+		}
+
 		//!\brief Assign an operation to this node.
 		//!
 		//! This designates this node as a branch node.
@@ -223,14 +258,14 @@ public:
 An expression tree is a tree that stores data in its leaf nodes and operations in its branch nodes.
 The tree's value can then be obtained by performing a preorder traversal, recursively applying the branch nodes's operations to their children.
 
-For example, his tree evaluates to (2 * 1 + (2 - 3)):
+For example, his tree evaluates to (2 * 1 + (2 - \a x)):
 
 \code
 (2 * l + r)
  /       \
 1      (l - r)
         /   \
-      2      3
+      2      x
 \endcode
 
 \section considerations Considerations
@@ -252,8 +287,6 @@ That is, all its branch nodes' children nodes must have been given a value.
 
 Coming soon. (In fact, I have the code already...)
 
- - Currently, a leaf node's value is assigned when it is created. Replace this value with a variable (e.g. \a x).
-   This will increase utility of expression_tree, allowing re-evaluation with different values for some or all leaf nodes.
  - Precompute values when leaves are constants and not variables.
 
 \section sample Sample code

@@ -28,7 +28,17 @@ int main()
     eti.root().right().left() = 2;
     eti.root().right().right() = 3;
 
-    cout << eti.evaluate() << endl;    	// Prints "1".
+    cout << eti.evaluate() << endl;    	// Prints "1" (2 * 1 + (2 - 3)).
+
+
+	int x = 1;
+	eti.root().right().right() = &x;
+	
+	cout << eti.evaluate() << endl;		// Prints "3" (2 * 1 + (2 - 1)).
+
+	x = 2;
+
+	cout << eti.evaluate() << endl;		// Prints "2" (2 * 1 + (2 - 2)).
 
 
     //         (l + r)
