@@ -42,25 +42,42 @@
 #define tr1_ std	// For vs 2010, the function class is in the std namespace.
 #endif
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4355)
+#endif
+
 //!\brief Implements an expression tree.
-template<typename T>
+//!
+//!\param T The data type.
+//!\param P Whether to pre-evaluate branches of constant value.
+template<typename T, bool P>
 class expression_tree
 {
 public:
 	//!\brief Operations must take two Ts as arguments and return a T.
 	typedef typename tr1_::function<T (T, T)> operation;
 
-	// Forward declaration.
-	template<typename U>
+	//!\brief The tree's node class.
+	//!
+	//! This class stores a pointer to its implementation.
+	//! The implementation node's type is derived at runtime when it is assigned to.
+	template<typename U, bool Q>
 	class node;
 
 private:
 	//!\brief Base class for the node class internal implementation.
-	template<typename U>
+	template<typename U, bool Q>
 	class node_impl
 	{
 	public:
 		virtual ~node_impl() {}
+
+		//!\brief Constness of the node.
+		//!
+		//! A leaf node is constant if its data is constant.
+		//! A bracn node is constant if all its leaf nodes are constant.
+		virtual bool constant() const = 0;
 
 		//!\brief All nodes must evaluate.
 		//!
@@ -72,17 +89,22 @@ private:
 	//!\brief Leaf class.
 	//!
 	//! This class stores a copy of its data.
-	template<typename U>
-	class leaf : public node_impl<U>
+	template<typename U, bool Q>
+	class leaf : public node_impl<U, Q>
 	{
-		U d;	//!< This node's data.
+		const U d;	//!< This node's data.
 
 	public:
 		leaf(const U& d) : d(d) {}
 
 		virtual ~leaf() {}
 
-		//! Because this node is a leaf, evaluating it returns the value of its data.
+		//! Because this classes stores a copy of its data, it is constant.
+		virtual bool constant() const
+		{
+			return true;
+		}
+
 		virtual U evaluate() const
 		{
 			return d;
@@ -92,8 +114,8 @@ private:
 	//!\brief Leaf class specialized to U*.
 	//!
 	//! This class stores a pointer to data.
-	template<typename U>
-	class leaf<U*> : public node_impl<U>
+	template<typename U, bool Q>
+	class leaf<U*, Q> : public node_impl<U, Q>
 	{
 		const U *d;		//!< This node's pointer to data.
 
@@ -101,6 +123,12 @@ private:
 		leaf(const U* d) : d(d) {}
 
 		virtual ~leaf() {}
+
+		//! Because this class stores a pointer to its data, it is not constant.
+		virtual bool constant() const
+		{
+			return false;
+		}
 
 		virtual U evaluate() const
 		{
@@ -111,16 +139,26 @@ private:
 	//!\brief Branch class.
 	//!
 	//! This class stores an operation and two children nodes.
+	template<typename U, bool Q>
+	class branch;
+
+	//!\brief Branch class specialized to \a not pre-evaluate.
 	template<typename U>
-	class branch : public node_impl<U>
+	class branch<U, false> : public node_impl<U, false>
 	{
-		operation f;	//!< Operation to be applied to this node's children.
-		node<U> l, r;	//!< This node's children.
+		operation f;			//!< Operation to be applied to this node's children.
+		node<U, false> l, r;	//!< This node's children.
 
 	public:
 		branch(const operation& f) : f(f) {}
 
 		virtual ~branch() {}
+
+		//! This will not be called.
+		virtual bool constant() const
+		{
+			return false;
+		}
 
 		//! Evaluating a branch node applies its operation on its children nodes.
 		virtual U evaluate() const
@@ -128,28 +166,88 @@ private:
 			return f(l.evaluate(), r.evaluate());
 		};
 
-		node<U>& left()
+		node<U, false>& left()
 		{
 			return l;
 		}
 
-		node<U>& right()
+		node<U, false>& right()
 		{
 			return r;
 		}
 	};
 
-	node<T> r;	//!<\brief The root of this tree.
+	//!\brief Branch class specialized to pre-evaluate.
+	template<typename U>
+	class branch<U, true> : public node_impl<U, true>
+	{
+		operation f;			//!< Operation to be applied to this node's children.
+		node<U, true> l, r;		//!< This node's children.
+
+		branch *p;				//!< This branch's parent node.
+		bool c;					//!< Whether this node is constant.
+		U v;					//!< This node's value, if this node is constant.
+
+	public:
+		branch(const operation& f, branch<U, true>* p = 0) : f(f), l(this), r(this), p(p), c(false) {}
+
+		virtual ~branch() {}
+		
+		//! This constness of this node will be calculated whenever its children are set.
+		virtual bool constant() const
+		{
+			return c;
+		}
+
+		//! If this node is constant, its values will have been pre-evaluated.
+		virtual U evaluate() const
+		{
+			if(c) return v;
+
+			return f(l.evaluate(), r.evaluate());
+		};
+
+		//! Called when children are added or modified.
+		void grow()
+		{
+			if(l.constant() && r.constant())
+			{
+				// If both children are constant, this node is constant. Pre-evaluate its value.
+				c = true;
+				v = f(l.evaluate(), r.evaluate());
+			}
+			else
+			{
+				// One or both children are not constant. This node is then not constant.
+				c = false;
+			}
+
+			// Recursively notify parent of growth.
+			if(p)
+			{
+				p->grow();
+			}
+		}
+
+		node<U, true>& left()
+		{
+			return l;
+		}
+
+		node<U, true>& right()
+		{
+			return r;
+		}
+	};
+
+	node<T, P> r;	//!<\brief The root of this tree.
 
 public:
-	//!\brief The tree's node class.
-	//!
-	//! This class stores a pointer to its implementation.
-	//! The implementation node's type is derived at runtime from its assignment operator.
+	//!\brief Node class specialized to \a not pre-evaluate.
 	template<typename U>
-	class node
+	class node<U, false>
 	{
-		node_impl<U> *i;	//!< Follows the pimpl idiom.
+		node_impl<U, false> *i;	//!< Follows the pimpl idiom.
 
 	public:
 		node() : i(0) {}
@@ -166,14 +264,14 @@ public:
 		//!
 		//! This designates this node as a leaf node.
 		//! A node can still become a branch node by assigning an operation to it.
-		node<U>& operator=(const U& t)
+		node<U, false>& operator=(const U& t)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new leaf<U>(t);
+			i = new leaf<U, false>(t);
 
 			return *this;
 		}
@@ -182,14 +280,14 @@ public:
 		//!
 		//! This designates this node as a leaf node.
 		//! A node can still become a branch node by assigning an operation to it.
-		node<U>& operator=(const U* t)
+		node<U, false>& operator=(const U* t)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new leaf<U*>(t);
+			i = new leaf<U*, false>(t);
 
 			return *this;
 		}
@@ -198,14 +296,14 @@ public:
 		//!
 		//! This designates this node as a branch node.
 		//! A node can still become a leaf node by assigning data to it.
-		node<U>& operator=(const operation& f)
+		node<U, false>& operator=(const operation& f)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new branch<U>(f);
+			i = new branch<U, false>(f);
 
 			return *this;
 		}
@@ -213,17 +311,128 @@ public:
 		//!\brief This node's left child.
 		//!
 		//! Note that if this node is a leaf node, behavior is undefined.
-		node<U>& left()
+		node<U, false>& left()
 		{
-			return dynamic_cast<branch<U>*>(i)->left();
+			return dynamic_cast<branch<U, false>*>(i)->left();
 		}
 
 		//!\brief This node's right child.
 		//!
 		//! Note that if this node is a leaf node, behavior is undefined.
-		node<U>& right()
+		node<U, false>& right()
 		{
-			return dynamic_cast<branch<U>*>(i)->right();
+			return dynamic_cast<branch<U, false>*>(i)->right();
+		}
+
+		//!\brief Evaluates the value of this node.
+		U evaluate() const
+		{
+			return i->evaluate();
+		}
+	};
+
+	//! Node class specialized to pre-evaluate.
+	template<typename U>
+	class node<U, true>
+	{
+		node_impl<U, true> *i;	//!< Follows the pimpl idiom.
+
+		branch<U, true> *parent;	//!< Pointer to this node's parent.
+
+	public:
+		node(branch<U, true> *parent = 0) : i(0), parent(parent) {}
+
+		virtual ~node()
+		{
+			if(i)
+			{
+				delete i;
+			}
+		}
+
+		//!\brief Assign a value to this node.
+		//!
+		//! This designates this node as a leaf node.
+		//! A node can still become a branch node by assigning an operation to it.
+		node<U, true>& operator=(const U& t)
+		{
+			if(i)
+			{
+				delete i;
+			}
+
+			i = new leaf<U, true>(t);
+
+			if(parent)
+			{
+				parent->grow();
+			}
+
+			return *this;
+		}
+
+		//!\brief Assign a pointer to this node.
+		//!
+		//! This designates this node as a leaf node.
+		//! A node can still become a branch node by assigning an operation to it.
+		node<U, true>& operator=(const U* t)
+		{
+			if(i)
+			{
+				delete i;
+			}
+
+			i = new leaf<U*, true>(t);
+
+			if(parent)
+			{
+				parent->grow();
+			}
+
+			return *this;
+		}
+
+		//!\brief Assign an operation to this node.
+		//!
+		//! This designates this node as a branch node.
+		//! A node can still become a leaf node by assigning data to it.
+		node<U, true>& operator=(const operation& f)
+		{
+			if(i)
+			{
+				delete i;
+			}
+
+			i = new branch<U, true>(f, parent);
+
+			if(parent)
+			{
+				parent->grow();
+			}
+
+			return *this;
+		}
+
+		//!\brief This node's left child.
+		//!
+		//! Note that if this node is a leaf node, behavior is undefined.
+		node<U, true>& left()
+		{
+			return dynamic_cast<branch<U, true>*>(i)->left();
+		}
+
+		//!\brief This node's right child.
+		//!
+		//! Note that if this node is a leaf node, behavior is undefined.
+		node<U, true>& right()
+		{
+			return dynamic_cast<branch<U, true>*>(i)->right();
+		}
+
+		//!\brief Constness of this node.
+		bool constant() const
+		{
+			return i ? i->constant() : false;
 		}
 
 		//!\brief Evaluates the value of this node.
@@ -236,7 +445,7 @@ public:
 	virtual ~expression_tree() {}
 
 	//!\brief This tree's root.
-	node<T>& root()
+	node<T, P>& root()
 	{
 		return r;
 	}
@@ -247,6 +456,10 @@ public:
 		return r.evaluate();
 	}
 };
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #endif
 
@@ -268,7 +481,7 @@ For example, his tree evaluates to (2 * 1 + (2 - \a x)):
       2      x
 \endcode
 
-\section considerations Considerations
+\section considerations Technical considerations
 
 This implementation:
  - is contained in a single header file.
@@ -283,11 +496,57 @@ This implementation:
 In order to be evaluated, the expression_tree must be correctly formed.
 That is, all its branch nodes' children nodes must have been given a value.
 
+\section pre-evaluating Pre-evaluating optimization
+
+By instantiating an epxression_tree with its second template parameter set to \c true, 
+evaluation will be optimzed by pre-evaluating a branch's value if all it childrens (branches or leaves) are constant.
+
+For example:
+
+\code
+  B1
+ /  \
+C1  B2
+   /  \
+  C2  C3
+\endcode
+
+If this tree is built in the following order: B1, C1, B2, C2, C3, upon assignment of C3, B2 will be found to be of constant value and be pre-evaluated.
+This pre-evaluation will continue recursively up the tree for as long as a branch's both children are constant.
+In this case, B1 will also be pre-evaluated.
+
+If C1 had instead been a variable (e.g. \a x), only B2 will have been pre-evaluated.
+B1, not having both its children constant, will be evaluated when expression_tree::evaluate() is called.
+
+\subsection degenerate Degenerate case
+
+Given the following tree:
+
+\code
+  B1
+ /  \
+C1  B2
+   /  \
+  C2  B3
+     /  \
+    C3   B4
+        / .
+       C4  .
+            .
+            Bn
+           /  \
+          Cn  Cn+1
+\endcode
+
+Before C<SUB>n+1</SUB> is assigned to, none of the tree has been pre-evaluated, given that none of its nodes' constness can be confirmed.
+When C<SUB>n+1</SUB> is assigned to, B<SUB>n</SUB> will be found constant and be evaluated.
+B<SUB>n-1</SUB> will also be found constant and be evaluated.
+This will continue until entire tree is evaluated.
+Thus, a single assignment can trigger the equivalent of expression_tree::evaluate().
+
 \section improvements Future improvements
 
-Coming soon. (In fact, I have the code already...)
-
- - Precompute values when leaves are constants and not variables.
+ - Allow assignment of an entire tree to a node.
 
 \section sample Sample code
 
@@ -301,13 +560,14 @@ using namespace std;
 
 int main()
 {
-    expression_tree<int> eti;
+    // Create an int tree that will not pre-evaluate.
+    expression_tree<int, false> etif;
 
     //        3
 
-    eti.root() = 3;
+    etif.root() = 3;
 
-    cout << eti.evaluate() << endl;    	// Prints "3".
+    cout << etif.evaluate() << endl; // Prints "3".
 
 
     //  (2 * l + r)
@@ -316,41 +576,67 @@ int main()
     //          /   \
     //        2      3
 
-    eti.root() = [](int i, int j){ return 2 * i + j; };
-    eti.root().left() = 1;
-    eti.root().right() = minus<int>();
-    eti.root().right().left() = 2;
-    eti.root().right().right() = 3;
+    etif.root() = [](int i, int j){ return 2 * i + j; }; // Re-assigns root node from leaf to branch.
+    etif.root().left() = 1;
+    etif.root().right() = minus<int>();
+    etif.root().right().left() = 2;
+    etif.root().right().right() = 3;
 
-    cout << eti.evaluate() << endl;    	// Prints "1".
+    cout << etif.evaluate() << endl; // Prints "1" (2 * 1 + (2 - 3)).
+
+    // Re-evaluate the tree.
+    // Because it is a non-pre-evaluating tree, all nodes will be re-visited and all operations re-applied.
+    cout << etif.evaluate() << endl;
+
+    // Assign a variable to the rightmost leaf.
+    int x = 1;
+    etif.root().right().right() = &x;
+	
+    cout << etif.evaluate() << endl; // Prints "3" (2 * 1 + (2 - 1)).
+
+    // Change the value of that variable and re-evaluate.
+    x = 2;
+
+    cout << etif.evaluate() << endl; // Prints "2" (2 * 1 + (2 - 2)).
 
 
-    //         (l + r)
-    //       /         \
-    // "expression"  (l + r)
-    //                /   \
-    //              " "  "tree"
+    // Create a string tree that will pre-evaluate.
+    expression_tree<string, true> etst;
+    
+    //    (l + r)
+    //  /         \
+    // s        (l + r)
+    //           /   \
+    //         " "  "tree"
 
-    expression_tree<string> ets;
-    ets.root() = plus<string>();
-    ets.root().left() = string("expression");
-    ets.root().right() = plus<string>();
-    ets.root().right().left() = string(" ");
-    ets.root().right().right() = string("tree");
+    string s = "expression";
 
-    cout << ets.evaluate() << endl;    	// Prints "expression tree".
+    etst.root() = plus<string>();
+    etst.root().left() = &s;
+    etst.root().right() = plus<string>();
+    etst.root().right().left() = string(" ");
+    etst.root().right().right() = string("tree");
 
+    cout << etst.evaluate() << endl; // Prints "expression tree".
 
-	// Misuses:
+    // Change the value of variable s and re-evaluate.
+    // Because this is a pre-evaluating tree, constant branches will not be re-evaluated.
+    // For this tree, it means the concatenation of " " and "tree" will not be performed again.
+    s = "apple";
 
-    expression_tree<float> crash;
-    //crash.evaluate();    	// The tree is empty.
+    cout << etst.evaluate() << endl; // Prints "apple tree".
+
+    
+    // Misues.
+
+    expression_tree<float, true> crash;
+    //crash.evaluate(); // The tree is empty.
 
     crash.root() = divides<float>();
-    //crash.evaluate();    	// This tree cannot be evaluated, its root node is an operation with no data children to operate on.
+    //crash.evaluate(); // This tree cannot be evaluated, its root node is an operation with no data children to operate on.
 
     crash.root() = 2.;
-    //crash.root().left() = divides<float>();    // Assigning to a data node's children is undefined behavior.
+    //crash.root().left() = divides<float>(); // Assigning to a data node's children is undefined behavior.
 
     return 0;
 }
