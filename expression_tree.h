@@ -53,7 +53,7 @@ namespace detail
 	template<typename T>
 	struct operation
 	{
-		typedef typename tr1_::function<T (T, T)> t;
+		typedef typename tr1_::function<T (T, T)> t;	//!< Template typedef trick.
 	};
 
 	//!\brief The tree's node class.
@@ -73,7 +73,7 @@ namespace detail
 		//!\brief Constness of the node.
 		//!
 		//! A leaf node is constant if its data is constant.
-		//! A bracn node is constant if all its leaf nodes are constant.
+		//! A branch node is constant if all its leaf nodes are constant.
 		virtual bool constant() const = 0;
 
 		//!\brief All nodes must evaluate.
@@ -92,6 +92,7 @@ namespace detail
 		const T d;	//!< This node's data.
 
 	public:
+		//! Constructor.
 		leaf(const T& d) : d(d) {}
 
 		virtual ~leaf() {}
@@ -117,6 +118,7 @@ namespace detail
 		const T *d;		//!< This node's pointer to data.
 
 	public:
+		//! Constructor.
 		leaf(const T* d) : d(d) {}
 
 		virtual ~leaf() {}
@@ -136,17 +138,15 @@ namespace detail
 	//!\brief Branch class.
 	//!
 	//! This class stores an operation and two children nodes.
+	//! The default implementation does \a not pre-evaluate.
 	template<typename T, bool P>
-	class branch;
-
-	//!\brief Branch class specialized to \a not pre-evaluate.
-	template<typename T>
-	class branch<T, false> : public node_impl<T, false>
+	class branch : public node_impl<T, P>
 	{
 		typename operation<T>::t f;	//!< Operation to be applied to this node's children.
-		node<T, false> l, r;		//!< This node's children.
+		node<T, P> l, r;		//!< This node's children.
 
 	public:
+		//! Constructor.
 		branch(const typename operation<T>::t& f) : f(f) {}
 
 		virtual ~branch() {}
@@ -163,12 +163,14 @@ namespace detail
 			return f(l.evaluate(), r.evaluate());
 		};
 
-		node<T, false>& left()
+		//!\brief This node's left child.
+		node<T, P>& left()
 		{
 			return l;
 		}
 
-		node<T, false>& right()
+		//!\brief This node's right child.
+		node<T, P>& right()
 		{
 			return r;
 		}
@@ -186,6 +188,7 @@ namespace detail
 		T v;						//!< This node's value, if this node is constant.
 
 	public:
+		//! Constructor.
 		branch(const typename operation<T>::t& f, branch<T, true>* p = 0) : f(f), l(this), r(this), p(p), c(false) {}
 
 		virtual ~branch() {}
@@ -226,24 +229,29 @@ namespace detail
 			}
 		}
 
+		//!\brief This node's left child.
 		node<T, true>& left()
 		{
 			return l;
 		}
 
+		//!\brief This node's right child.
 		node<T, true>& right()
 		{
 			return r;
 		}
 	};
 
-	//!\brief Node class specialized to \a not pre-evaluate.
-	template<typename T>
-	class node<T, false>
+	//!\brief Node class.
+	//!
+	//! The default implementation does \a not pre-evaluate.
+	template<typename T, bool P>
+	class node
 	{
-		node_impl<T, false> *i;	//!< Follows the pimpl idiom.
+		node_impl<T, P> *i;	//!< Follows the pimpl idiom.
 
 	public:
+		//! Constructor.
 		node() : i(0) {}
 
 		virtual ~node()
@@ -258,14 +266,14 @@ namespace detail
 		//!
 		//! This designates this node as a leaf node.
 		//! A node can still become a branch node by assigning an operation to it.
-		node<T, false>& operator=(const T& t)
+		node<T, P>& operator=(const T& t)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new leaf<T, false>(t);
+			i = new leaf<T, P>(t);
 
 			return *this;
 		}
@@ -274,14 +282,14 @@ namespace detail
 		//!
 		//! This designates this node as a leaf node.
 		//! A node can still become a branch node by assigning an operation to it.
-		node<T, false>& operator=(const T* t)
+		node<T, P>& operator=(const T* t)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new leaf<T*, false>(t);
+			i = new leaf<T*, P>(t);
 
 			return *this;
 		}
@@ -290,14 +298,14 @@ namespace detail
 		//!
 		//! This designates this node as a branch node.
 		//! A node can still become a leaf node by assigning data to it.
-		node<T, false>& operator=(const typename operation<T>::t& f)
+		node<T, P>& operator=(const typename operation<T>::t& f)
 		{
 			if(i)
 			{
 				delete i;
 			}
 
-			i = new branch<T, false>(f);
+			i = new branch<T, P>(f);
 
 			return *this;
 		}
@@ -305,17 +313,17 @@ namespace detail
 		//!\brief This node's left child.
 		//!
 		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, false>& left()
+		node<T, P>& left()
 		{
-			return dynamic_cast<branch<T, false>*>(i)->left();
+			return dynamic_cast<branch<T, P>*>(i)->left();
 		}
 
 		//!\brief This node's right child.
 		//!
 		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, false>& right()
+		node<T, P>& right()
 		{
-			return dynamic_cast<branch<T, false>*>(i)->right();
+			return dynamic_cast<branch<T, P>*>(i)->right();
 		}
 
 		//!\brief Evaluates the value of this node.
@@ -334,6 +342,7 @@ namespace detail
 		branch<T, true> *parent;	//!< Pointer to this node's parent.
 
 	public:
+		//! Constructor.
 		node(branch<T, true> *parent = 0) : i(0), parent(parent) {}
 
 		virtual ~node()
@@ -441,7 +450,7 @@ namespace detail
 //!
 //!\param T The data type.
 //!\param P Whether to pre-evaluate branches of constant value.
-template<typename T, bool P>
+template<typename T, bool P = false>
 class expression_tree : public detail::node<T, P>
 {
 public:
@@ -498,7 +507,7 @@ That is, all its branch nodes' children nodes must have been given a value.
 By instantiating an expression_tree with its second template parameter set to \c true, 
 evaluation will be optimzed by pre-evaluating a branch's value if all it childrens (branches or leaves) are constant.
 
-For example:
+Consider the following tree, where B<SUB>n</SUB> is a branch and C<SUB>n</SUB> is a constant value:
 
 \code
   B1
@@ -508,12 +517,13 @@ C1  B2
   C2  C3
 \endcode
 
-If this tree is built in the following order: B1, C1, B2, C2, C3, upon assignment of C3, B2 will be found to be of constant value and be pre-evaluated.
+If this tree is built in the following order: B<SUB>1</SUB>, C<SUB>1</SUB>, B<SUB>2</SUB>, C<SUB>2</SUB>, C<SUB>3</SUB>, 
+upon assignment of C<SUB>3</SUB>, B<SUB>2</SUB> will be found to be of constant value and be pre-evaluated.
 This pre-evaluation will continue recursively up the tree for as long as a branch's both children are constant.
-In this case, B1 will also be pre-evaluated.
+In this case, B<SUB>1</SUB> will also be pre-evaluated.
 
-If C1 had instead been a variable (e.g. \a x), only B2 will have been pre-evaluated.
-B1, not having both its children constant, will be evaluated when expression_tree::evaluate() is called.
+If C<SUB>1</SUB> had instead been a variable (e.g. \a x), only B<SUB>2</SUB> will have been pre-evaluated.
+B<SUB>1</SUB>, not having both its children constant, will be evaluated when expression_tree::evaluate() is called.
 
 \subsection degenerate Degenerate case
 
