@@ -74,6 +74,40 @@ int main()
     cout << etst.evaluate() << endl; // Prints "apple tree".
 
     
+	// Copying a tree (or sub-tree) to another tree's node.
+	expression_tree<int, true> etit;
+
+	//  (l + r)
+	//  /    \
+	// y      2
+
+	int y = 2;
+
+	etit.root() = plus<int>();
+	etit.left() = &y;
+	etit.right() = 2;
+
+	cout << etit.evaluate() << endl; // Prints "4" (y + 2).
+
+	//     (l + r)
+	//      /   \
+	// (l + r)   2
+	//  /   \
+	// y     2
+
+	etit.left() = etit.root();
+
+	//     (l + r)
+	//      /   \
+	// (l + r)  (l + r)
+	//  /   \    /   \
+	// y     2  y     2
+
+	etit.right() = etit.left();
+
+	cout << etit.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
+
+
     // Misues.
 
     expression_tree<float, true> crash;

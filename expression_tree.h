@@ -70,6 +70,11 @@ namespace detail
 	public:
 		virtual ~node_impl() {}
 
+		//!\brief Clones this object.
+		//!
+		//! Necessary for assignment operator of classes that will own concrete instances of this base class.
+		virtual node_impl<T, P>* clone() const = 0;
+
 		//!\brief Constness of the node.
 		//!
 		//! A leaf node is constant if its data is constant.
@@ -95,7 +100,16 @@ namespace detail
 		//! Constructor.
 		leaf(const T& d) : d(d) {}
 
+		//! Copy constructor.
+		leaf(const leaf<T, P>& o) : d(o.d) {}
+
 		virtual ~leaf() {}
+
+		//!\brief Clones this object.
+		virtual leaf<T, P>* clone() const
+		{
+			return new leaf<T, P>(*this);
+		}
 
 		//! Because this classes stores a copy of its data, it is constant.
 		virtual bool constant() const
@@ -115,13 +129,22 @@ namespace detail
 	template<typename T, bool P>
 	class leaf<T*, P> : public node_impl<T, P>
 	{
-		const T *d;		//!< This node's pointer to data.
+		const T *p;		//!< This node's pointer to data.
 
 	public:
 		//! Constructor.
-		leaf(const T* d) : d(d) {}
+		leaf(const T* p) : p(p) {}
+
+		//! Copy constructor.
+		leaf(const leaf<T, P>& o) : p(o.p) {}
 
 		virtual ~leaf() {}
+
+		//!\brief Clones this object.
+		virtual leaf<T*, P>* clone() const
+		{
+			return new leaf<T*, P>(*this);
+		}
 
 		//! Because this class stores a pointer to its data, it is not constant.
 		virtual bool constant() const
@@ -131,7 +154,7 @@ namespace detail
 
 		virtual T evaluate() const
 		{
-			return *d;
+			return *p;
 		}
 	};
 
@@ -149,7 +172,16 @@ namespace detail
 		//! Constructor.
 		branch(const typename operation<T>::t& f) : f(f) {}
 
+		//! Copy constructor.
+		branch(const branch<T, P>& o) : f(o.f), l(o.l), r(o.r) {}
+
 		virtual ~branch() {}
+
+		//!\brief Clones this object.
+		virtual branch<T, P>* clone() const
+		{
+			return new branch<T, P>(*this);
+		}
 
 		//! This will not be called.
 		virtual bool constant() const
@@ -180,6 +212,8 @@ namespace detail
 	template<typename T>
 	class branch<T, true> : public node_impl<T, true>
 	{
+		friend class node<T, true>;	// node<T, true>'s assignment operator needs to set p. clone() won't do it.
+
 		typename operation<T>::t f;	//!< Operation to be applied to this node's children.
 		node<T, true> l, r;			//!< This node's children.
 
@@ -191,8 +225,17 @@ namespace detail
 		//! Constructor.
 		branch(const typename operation<T>::t& f, branch<T, true>* p = 0) : f(f), l(this), r(this), p(p), c(false) {}
 
+		//! Copy constructor.
+		branch(const branch<T, true>& o) : f(o.f), l(o.l), r(o.r), c(o.c), v(o.v) {}
+
 		virtual ~branch() {}
 		
+		//!\brief Clones this object.
+		virtual branch<T, true>* clone() const
+		{
+			return new branch<T, true>(*this);
+		}
+
 		//! This constness of this node will be calculated whenever its children are set.
 		virtual bool constant() const
 		{
@@ -253,6 +296,27 @@ namespace detail
 	public:
 		//! Constructor.
 		node() : i(0) {}
+
+		//! Copy constructor.
+		node(const node<T, P>& o) : i(o.i->clone()) {}
+
+		//! Assignment operator.
+		node<T, P>& operator=(const node<T, P>& o)
+		{
+			if(this != &o)
+			{
+				node_impl<T, true>* c = o.i->clone();
+
+				if(i)
+				{
+					delete i;
+				}
+
+				i = c;
+			}
+
+			return *this;
+		}
 
 		virtual ~node()
 		{
@@ -339,11 +403,49 @@ namespace detail
 	{
 		node_impl<T, true> *i;	//!< Follows the pimpl idiom.
 
-		branch<T, true> *parent;	//!< Pointer to this node's parent.
+		branch<T, true> *p;	//!< Pointer to this node's parent.
 
 	public:
 		//! Constructor.
-		node(branch<T, true> *parent = 0) : i(0), parent(parent) {}
+		node(branch<T, true> *p = 0) : i(0), p(p) {}
+
+		//! Copy constructor.
+		node(const node<T, true>& o) : i(o.i->clone()), p(o.p)
+		{
+			if(branch<T, true>* b = dynamic_cast<branch<T, true>*>(i))
+			{
+				b->p = p;
+			}
+		}
+
+		//! Assignment operator.
+		node<T, true>& operator=(const node<T, true>& o)
+		{
+			if(this != &o)
+			{
+				node_impl<T, true>* c = o.i->clone();
+
+				if(i)
+				{
+					delete i;
+				}
+
+				i = p;
+				p = o.p;
+
+				if(branch<T, true>* b = dynamic_cast<branch<T, true>*>(i))
+				{
+					b->p = p;
+				}
+
+				if(p)
+				{
+					p->grow();
+				}
+			}
+
+			return *this;
+		}
 
 		virtual ~node()
 		{
@@ -366,9 +468,9 @@ namespace detail
 
 			i = new leaf<T, true>(t);
 
-			if(parent)
+			if(p)
 			{
-				parent->grow();
+				p->grow();
 			}
 
 			return *this;
@@ -387,9 +489,9 @@ namespace detail
 
 			i = new leaf<T*, true>(t);
 
-			if(parent)
+			if(p)
 			{
-				parent->grow();
+				p->grow();
 			}
 
 			return *this;
@@ -406,11 +508,11 @@ namespace detail
 				delete i;
 			}
 
-			i = new branch<T, true>(f, parent);
+			i = new branch<T, true>(f, p);
 
-			if(parent)
+			if(p)
 			{
-				parent->grow();
+				p->grow();
 			}
 
 			return *this;
@@ -554,6 +656,7 @@ Thus, a single assignment can trigger the equivalent of expression_tree::evaluat
 \section improvements Future improvements
 
  - Allow assignment of an entire tree to a node.
+ - Have a middle ground optimization where values of constant branches are cached when evaluated, not when their children are assigned to. 
 
 \section sample Sample code
 
