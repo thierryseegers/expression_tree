@@ -212,18 +212,15 @@ namespace detail
 	template<typename T>
 	class branch<T, true> : public node_impl<T, true>
 	{
-		friend class node<T, true>;	// node<T, true>'s assignment operator needs to set p. clone() won't do it.
-
 		typename operation<T>::t f;	//!< Operation to be applied to this node's children.
 		node<T, true> l, r;			//!< This node's children.
 
-		branch *p;					//!< This branch's parent node.
 		bool c;						//!< Whether this node is constant.
 		T v;						//!< This node's value, if this node is constant.
 
 	public:
 		//! Constructor.
-		branch(const typename operation<T>::t& f, branch<T, true>* p = 0) : f(f), l(this), r(this), p(p), c(false) {}
+		branch(const typename operation<T>::t& f, const node<T, true>& l, const node<T, true>& r) : f(f), l(l), r(r), c(false) {}
 
 		//! Copy constructor.
 		branch(const branch<T, true>& o) : f(o.f), l(o.l), r(o.r), c(o.c), v(o.v) {}
@@ -251,7 +248,7 @@ namespace detail
 		};
 
 		//! Called when children are added or modified.
-		void grow()
+		void preevaluate()
 		{
 			if(l.constant() && r.constant())
 			{
@@ -263,12 +260,6 @@ namespace detail
 			{
 				// One or both children are not constant. This node is then not constant.
 				c = false;
-			}
-
-			// Recursively notify parent of growth.
-			if(p)
-			{
-				p->grow();
 			}
 		}
 
@@ -403,20 +394,14 @@ namespace detail
 	{
 		node_impl<T, true> *i;	//!< Follows the pimpl idiom.
 
-		branch<T, true> *p;	//!< Pointer to this node's parent.
+		node<T, true> *p;	//!< Pointer to this node's parent.
 
 	public:
 		//! Constructor.
-		node(branch<T, true> *p = 0) : i(0), p(p) {}
+		node(node<T, true> *p = 0) : i(0), p(p) {}
 
 		//! Copy constructor.
-		node(const node<T, true>& o) : i(o.i->clone()), p(o.p)
-		{
-			if(branch<T, true>* b = dynamic_cast<branch<T, true>*>(i))
-			{
-				b->p = p;
-			}
-		}
+		node(const node<T, true>& o) : i(o.i ? o.i->clone() : 0), p(o.p) {}
 
 		//! Assignment operator.
 		node<T, true>& operator=(const node<T, true>& o)
@@ -430,13 +415,8 @@ namespace detail
 					delete i;
 				}
 
-				i = p;
+				i = c;
 				p = o.p;
-
-				if(branch<T, true>* b = dynamic_cast<branch<T, true>*>(i))
-				{
-					b->p = p;
-				}
 
 				if(p)
 				{
@@ -508,7 +488,7 @@ namespace detail
 				delete i;
 			}
 
-			i = new branch<T, true>(f, p);
+			i = new branch<T, true>(f, node<T, true>(this), node<T, true>(this));
 
 			if(p)
 			{
@@ -544,6 +524,21 @@ namespace detail
 		T evaluate() const
 		{
 			return i->evaluate();
+		}
+
+		//!\brief Called when this node is assigned to.
+		//!
+		//! Recursively pre-evaluates this branch and this its parents.
+		//! If this function ends up being called when this node is a leaf,
+		//! it is indicative of user error.
+		void grow()
+		{
+			dynamic_cast<branch<T, true>*>(i)->preevaluate();
+
+			if(p)
+			{
+				p->grow();
+			}
 		}
 	};
 }
@@ -599,7 +594,7 @@ This implementation:
  - requires RTTI.
  - has little in the way of safety checks.
  - has been tested with g++ 4.2.1, VS 2008 and VS2010.
-   Later versions of g++ probably do not require the extra header inclusion (may not hurt) or the std::tr1 macro (may hurt).
+   Later versions of g++ probably do not require the extra \c <tr1/functional> header inclusion (may not hurt) or the \c std::tr1 macro (may hurt).
 
 In order to be evaluated, the expression_tree must be correctly formed.
 That is, all its branch nodes' children nodes must have been given a value.
@@ -607,7 +602,7 @@ That is, all its branch nodes' children nodes must have been given a value.
 \section pre-evaluating Pre-evaluating optimization
 
 By instantiating an expression_tree with its second template parameter set to \c true, 
-evaluation will be optimzed by pre-evaluating a branch's value if all it childrens (branches or leaves) are constant.
+a tree's evaluation will be optimzed by pre-evaluating a branch's value if all it childrens (branches or leaves) are constant.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch and C<SUB>n</SUB> is a constant value:
 
@@ -655,7 +650,6 @@ Thus, a single assignment can trigger the equivalent of expression_tree::evaluat
 
 \section improvements Future improvements
 
- - Allow assignment of an entire tree to a node.
  - Have a middle ground optimization where values of constant branches are cached when evaluated, not when their children are assigned to. 
 
 \section sample Sample code
@@ -673,6 +667,8 @@ int main()
     // Create an int tree that will not pre-evaluate.
     expression_tree<int, false> etif;
 
+    // Let's build the simplest of trees, a singe leaf:
+    //
     //        3
 
     etif.root() = 3;
@@ -680,6 +676,8 @@ int main()
     cout << etif.evaluate() << endl; // Prints "3".
 
 
+    // Let's build a more complex tree:
+    //
     //  (2 * l + r)
     //   /       \
     //  1      (l - r)
@@ -698,6 +696,14 @@ int main()
     // Because it is a non-pre-evaluating tree, all nodes will be re-visited and all operations re-applied.
     cout << etif.evaluate() << endl;
 
+    // Let's change the tree a bit. Make one leaf a variable:
+    //
+    //  (2 * l + r)
+    //   /       \
+    //  1      (l - r)
+    //          /   \
+    //        2      x
+
     // Assign a variable to the rightmost leaf.
     int x = 1;
     etif.root().right().right() = &x;
@@ -710,9 +716,11 @@ int main()
     cout << etif.evaluate() << endl; // Prints "2" (2 * 1 + (2 - 2)).
 
 
-    // Create a string tree that will pre-evaluate.
+    // Create a string tree with the pre-evaluation optimization.
     expression_tree<string, true> etst;
     
+    // Let's build this tree:
+    //
     //    (l + r)
     //  /         \
     // s        (l + r)
@@ -737,6 +745,46 @@ int main()
     cout << etst.evaluate() << endl; // Prints "apple tree".
 
     
+    // Here's an example of copying a tree (or sub-tree) to another tree's node.
+    expression_tree<int, true> etit;
+
+    // We first build a simple tree:
+    //
+    //  (l + r)
+    //  /    \
+    // y      2
+
+    int y = 2;
+
+    etit.root() = plus<int>();
+    etit.left() = &y;
+    etit.right() = 2;
+
+    cout << etit.evaluate() << endl; // Prints "4" (y + 2).
+
+    // Then we build on it (using its own nodes!):
+    //
+    //     (l + r)
+    //      /   \
+    // (l + r)   2
+    //  /   \
+    // y     2
+
+    etit.left() = etit.root();
+
+    // Let's make it even bigger:
+    //
+    //     (l + r)
+    //      /   \
+    // (l + r)  (l + r)
+    //  /   \    /   \
+    // y     2  y     2
+
+    etit.right() = etit.left();
+
+    cout << etit.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
+
+
     // Misues.
 
     expression_tree<float, true> crash;

@@ -10,6 +10,8 @@ int main()
     // Create an int tree that will not pre-evaluate.
     expression_tree<int, false> etif;
 
+    // Let's build the simplest of trees, a singe leaf:
+    //
     //        3
 
     etif.root() = 3;
@@ -17,6 +19,8 @@ int main()
     cout << etif.evaluate() << endl; // Prints "3".
 
 
+    // Let's build a more complex tree:
+    //
     //  (2 * l + r)
     //   /       \
     //  1      (l - r)
@@ -35,6 +39,14 @@ int main()
     // Because it is a non-pre-evaluating tree, all nodes will be re-visited and all operations re-applied.
     cout << etif.evaluate() << endl;
 
+    // Let's change the tree a bit. Make one leaf a variable:
+	//
+	//  (2 * l + r)
+    //   /       \
+    //  1      (l - r)
+    //          /   \
+    //        2      x
+
     // Assign a variable to the rightmost leaf.
     int x = 1;
     etif.root().right().right() = &x;
@@ -47,9 +59,11 @@ int main()
     cout << etif.evaluate() << endl; // Prints "2" (2 * 1 + (2 - 2)).
 
 
-    // Create a string tree that will pre-evaluate.
+    // Create a string tree with the pre-evaluation optimization.
     expression_tree<string, true> etst;
     
+    // Let's build this tree:
+    //
     //    (l + r)
     //  /         \
     // s        (l + r)
@@ -74,38 +88,44 @@ int main()
     cout << etst.evaluate() << endl; // Prints "apple tree".
 
     
-	// Copying a tree (or sub-tree) to another tree's node.
-	expression_tree<int, true> etit;
+    // Here's an example of copying a tree (or sub-tree) to another tree's node.
+    expression_tree<int, true> etit;
 
-	//  (l + r)
-	//  /    \
-	// y      2
+    // We first build a simple tree:
+    //
+    //  (l + r)
+    //  /    \
+    // y      2
 
-	int y = 2;
+    int y = 2;
 
-	etit.root() = plus<int>();
-	etit.left() = &y;
-	etit.right() = 2;
+    etit.root() = plus<int>();
+    etit.left() = &y;
+    etit.right() = 2;
 
-	cout << etit.evaluate() << endl; // Prints "4" (y + 2).
+    cout << etit.evaluate() << endl; // Prints "4" (y + 2).
 
-	//     (l + r)
-	//      /   \
-	// (l + r)   2
-	//  /   \
-	// y     2
+    // Then we build on it (using its own nodes!):
+    //
+    //     (l + r)
+    //      /   \
+    // (l + r)   2
+    //  /   \
+    // y     2
 
-	etit.left() = etit.root();
+    etit.left() = etit.root();
 
-	//     (l + r)
-	//      /   \
-	// (l + r)  (l + r)
-	//  /   \    /   \
-	// y     2  y     2
+    // Let's make it even bigger:
+    //
+    //     (l + r)
+    //      /   \
+    // (l + r)  (l + r)
+    //  /   \    /   \
+    // y     2  y     2
 
-	etit.right() = etit.left();
+    etit.right() = etit.left();
 
-	cout << etit.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
+    cout << etit.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
 
 
     // Misues.
