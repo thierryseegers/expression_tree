@@ -702,7 +702,7 @@ Thus, a single assignment can trigger the equivalent of expression_tree::evaluat
 
 \section improvements Future improvements
 
- - None for now.
+ - Multi-threaded evaluation perhaps? In the spirit of not having this header depend on third-party libraries, I'll wait until std::thread is more readily available.
 
 \section sample Sample code
 
@@ -834,7 +834,7 @@ int main()
     cout << etip.evaluate() << endl; // Prints "11".
 
     
-	// Here's an example of copying a tree (or sub-tree) to another tree's node.
+    // Here's an example of copying a tree (or sub-tree) to another tree's node.
     expression_tree<int, true> etic;
 
     // We first build a simple tree:
