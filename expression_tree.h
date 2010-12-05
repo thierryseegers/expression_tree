@@ -797,7 +797,7 @@ int main()
     cout << etsc.evaluate() << endl; // Prints "apple tree".
 
     // But hwat happens if we do change the value of one the leaves that had a constant values?
-    // We do the right thing, and discard the previously cached value.
+    // expression_tree will do the right thing, and discard the previously cached value.
 
     etsc.root().right().right() = string("pie");
 
