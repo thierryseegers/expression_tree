@@ -27,7 +27,7 @@
 */
 
 #if !defined(EXPRESSION_TREE_H)
-	 #define EXPRESSION_TREE_H
+     #define EXPRESSION_TREE_H
 
 #include <functional>	// Eventually, that's all we'll need.
 
@@ -35,551 +35,504 @@
 #include <tr1/functional>	// Needed for g++ 4.2.x.
 #endif
 
-// As of g++ 4.2.x and VS 2008, the function class is in the std::tr1 namespace.
+// For g++ 4.2.x and VS 2008, the function class is in the std::tr1 namespace.
 #if defined(__GNUG__) || (defined(_MSC_VER) && (_MSC_VER >= 1500 && _MSC_VER < 1600))
 #define tr1_ std::tr1
 #else
-#define tr1_ std	// For vs 2010, the function class is in the std namespace.
+#define tr1_ std	// For VS 2010, the function class is in the std namespace.
 #endif
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4355)
-#endif
+namespace expression_tree
+{
+
+template<typename T, template<typename> class CachingPolicy>
+class node;
 
 namespace detail
 {
-	//!\brief Operations must take two Ts as arguments and return a T.
-	template<typename T>
-	struct operation
+
+//!\brief Operations are what branches perform on their children.
+//!
+//! Operations must take two Ts as arguments and return a T.
+template<typename T>
+struct operation
+{
+	typedef typename tr1_::function<T (T, T)> t;	//!< Template typedef trick.
+};
+
+//!\brief Base class for the node class internal implementation.
+template<typename T>
+class node_impl
+{
+public:
+	virtual ~node_impl() {}
+
+	//!\brief Clones this object.
+	//!
+	//! Necessary for assignment operator of classes that will own concrete instances of this base class.
+	virtual node_impl<T>* clone() const = 0;
+
+	//!\brief Constness of the node.
+	//!
+	//! A leaf node is constant if its data is constant.
+	//! A branch node is constant if all its leaf nodes are constant.
+	virtual bool constant() const = 0;
+
+	//!\brief All nodes must evaluate.
+	//!
+	//! A leaf will evaluate to itself.
+	//! A branch will evaluate to its operation applied to its left and right children.
+	virtual T evaluate() const = 0;
+};
+
+//!\brief Leaf class.
+//!
+//! This class stores a copy of its data.
+template<typename T>
+class leaf : public node_impl<T>
+{
+	const T value; //!< This node's value.
+
+public:
+	//!\brief Constructor.
+	//!
+	//!\param value The value of this node.
+	leaf(const T& value) : value(value) {}
+
+	//!\brief Copy constructor.
+	leaf(const leaf<T>& other) : value(other.value) {}
+
+	virtual ~leaf() {}
+
+	//!\brief Clones this object.
+	virtual leaf<T>* clone() const
 	{
-		typedef typename tr1_::function<T (T, T)> t;	//!< Template typedef trick.
+		return new leaf<T>(*this);
+	}
+
+	//! Because this classes stores a copy of its data, it is constant.
+	virtual bool constant() const
+	{
+		return true;
+	}
+
+	//! Plainly return our value.
+	virtual T evaluate() const
+	{
+		return value;
+	}
+};
+
+//!\brief Leaf class specialized to T*.
+//!
+//! This class stores a pointer to data.
+template<typename T>
+class leaf<T*> : public node_impl<T>
+{
+	const T *p;	//!< This node's pointer to data.
+
+public:
+	//!\brief Constructor
+	//!
+	//!\param p Pointer to this node's value.
+	leaf(const T* p) : p(p) {}
+
+	//!\brief Copy constructor.
+	leaf(const leaf<T*>& other) : p(other.p) {}
+
+	virtual ~leaf() {}
+
+	//!\brief Clones this object.
+	virtual leaf<T*>* clone() const
+	{
+		return new leaf<T*>(*this);
+	}
+
+	//! Because this class stores a pointer to its data, it is not constant.
+	virtual bool constant() const
+	{
+		return false;
+	}
+
+	//! Dereference our pointer.
+	virtual T evaluate() const
+	{
+		return *p;
+	}
+};
+
+//!\brief Branch class.
+//!
+//! This class stores an operation and two children nodes.
+//! This default implementation does \a no caching optimization.
+template<typename T, template<typename> class CachingPolicy>
+class default_branch : public node_impl<T>
+{
+public:
+	node<T, CachingPolicy> l;	//!< This branch's left child.
+	node<T, CachingPolicy> r;	//!< This branch's right child.
+	typename operation<T>::t f;	//!< Operation to be applied to this node's children.
+	
+	//!\brief Constructor.
+	//!
+	//!\param f The operation to apply to this branch's children,
+	//!\param l This branch's left child.
+	//!\param r This branch's right child.
+	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy>& l, const node<T, CachingPolicy>& r) : f(f), l(l), r(r) {}
+
+	//!\brief Copy constructor.
+	default_branch(const default_branch<T, CachingPolicy>& other) : f(other.f), l(other.l), r(other.r) {}
+	
+	virtual ~default_branch() {}
+
+	//!\brief Clones this object.
+	virtual default_branch<T, CachingPolicy>* clone() const
+	{
+		return new default_branch<T, CachingPolicy>(*this);
+	}
+
+	//! The constness of a branch is determined by the constness of its children.
+	virtual bool constant() const
+	{
+		return l.constant() && r.constant();
+	}
+
+	//! Evaluating a branch applies its operation on its children.
+	virtual T evaluate() const
+	{
+		return f(l.evaluate(), r.evaluate());
 	};
 
-	//!\brief The tree's node class.
-	//!
-	//! This class stores a pointer to its implementation.
-	//! The implementation node's type is derived at runtime when it is assigned to.
-	template<typename T, bool C, bool P>
-	class node;
+	//!\brief This branch's left child.
+	virtual node<T, CachingPolicy>& left()
+	{
+		return l;
+	}
 
-	//!\brief Base class for the node class internal implementation.
-	template<typename T, bool C, bool P>
-	class node_impl
+	//!\brief This branch's right child.
+	virtual node<T, CachingPolicy>& right()
+	{
+		return r;
+	}
+
+	//! This function is called when anyone of this branch's children is modified.
+	//! This default implementation does nothing when that happens.
+	virtual void grow()
+	{
+		return;
+	}
+};
+
+}
+
+//!\brief The tree's node class.
+//!
+//! This class stores a pointer to its implementation.
+//! The implementation node's type is derived at runtime when it is assigned to.
+template<typename T, template<typename> class CachingPolicy>
+class node
+{
+	detail::node_impl<T> *impl;		//!< Follows the pimpl idiom.
+	node<T, CachingPolicy> *parent; //!< This node's parent. Ends up unused when no caching occurs.
+
+public:
+	//!\brief Default constructor.
+	//!
+	//!\param parent Pointer to this node's parent.
+	node(node<T, CachingPolicy> *parent = 0) : impl(0), parent(parent) {}
+
+	//!\brief Copy constructor.
+	node(const node<T, CachingPolicy>& other) : impl(other.impl ? other.impl->clone() : 0), parent(other.parent) {}
+
+	//!\brief Assignment operator.
+	node<T, CachingPolicy>& operator=(const node<T, CachingPolicy>& other)
+	{
+		if(this != &other)
+		{
+			detail::node_impl<T>* c = other.impl->clone();
+
+			if(impl)
+			{
+				delete impl;
+			}
+
+			impl = c;
+			parent = other.parent;
+
+			if(parent)
+			{
+				parent->grow();
+			}
+		}
+
+		return *this;
+	}
+
+	virtual ~node()
+	{
+		if(impl)
+		{
+			delete impl;
+		}
+	}
+
+	//!\brief Assign a value to this node.
+	//!
+	//! The assignment of a \c T designates this node as a leaf node.
+	//! A leaf can still be changed to a branch by assigning an operation to it.
+	node<T, CachingPolicy>& operator=(const T& t)
+	{
+		if(impl)
+		{
+			delete impl;
+		}
+
+		impl = new detail::leaf<T>(t);
+
+		if(parent)
+		{
+			parent->grow();
+		}
+
+		return *this;
+	}
+
+	//!\brief Assign a pointer to this node.
+	//!
+	//! The assignment of a \c T* designates this node as a leaf node.
+	//! A leaf can still be changed to a branch by assigning an operation to it.
+	node<T, CachingPolicy>& operator=(const T* t)
+	{
+		if(impl)
+		{
+			delete impl;
+		}
+
+		impl = new detail::leaf<T*>(t);
+
+		if(parent)
+		{
+			parent->grow();
+		}
+
+		return *this;
+	}
+
+	//!\brief Assign an operation to this node.
+	//!
+	//! The assignment of an operation designates this node as a branch.
+	//! A branch can still be changed to a leaf by assigning data to it.
+	node<T, CachingPolicy>& operator=(const typename detail::operation<T>::t& f)
+	{
+		if(impl)
+		{
+			delete impl;
+		}
+
+		// Create a new branch with the passed operation and two nodes with this node as their parent.
+		impl = new typename CachingPolicy<T>::branch(f, node<T, CachingPolicy>(this), node<T, CachingPolicy>(this));
+
+		if(parent)
+		{
+			parent->grow();
+		}
+
+		return *this;
+	}
+
+	//!\brief This node's left child.
+	//!
+	//! Note that if this node is a leaf node, behavior is undefined.
+	node<T, CachingPolicy>& left()
+	{
+		return dynamic_cast<typename CachingPolicy<T>::branch*>(impl)->left();
+	}
+
+	//!\brief This node's right child.
+	//!
+	//! Note that if this node is a leaf node, behavior is undefined.
+	node<T, CachingPolicy>& right()
+	{
+		return dynamic_cast<typename CachingPolicy<T>::branch*>(impl)->right();
+	}
+
+	//!\brief Constness of this node.
+	bool constant() const
+	{
+		return impl ? impl->constant() : false;
+	}
+
+	//!\brief Evaluates the value of this node.
+	T evaluate() const
+	{
+		return impl->evaluate();
+	}
+
+	//!\brief Called when this node is assigned to.
+	//!
+	//! Recursively notifies parent nodes of the growth that happened.
+	void grow()
+	{
+		dynamic_cast<typename CachingPolicy<T>::branch*>(impl)->grow();
+
+		if(parent)
+		{
+			parent->grow();
+		}
+	}
+};
+
+//!\brief Implementation of the CachingPolicy used by tree.
+template<typename T>
+struct no_caching
+{
+	//!\brief Implementation of a branch class that performs no caching.
+	//!
+	//! This class performs no optimization.
+	//! A non-caching branch will apply its operation on its children whenever it is evaluated.
+	class branch : public detail::default_branch<T, expression_tree::no_caching>
 	{
 	public:
-		virtual ~node_impl() {}
+		//!\brief Default constructor.
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::no_caching>& l, const node<T, expression_tree::no_caching>& r)
+			: detail::default_branch<T, expression_tree::no_caching>(f, l, r) {}
 
-		//!\brief Clones this object.
-		//!
-		//! Necessary for assignment operator of classes that will own concrete instances of this base class.
-		virtual node_impl<T, C, P>* clone() const = 0;
+		//!\brief Copy constructor.
+		branch(const branch& o) : detail::default_branch<T, expression_tree::no_caching>(o) {}
 
-		//!\brief Constness of the node.
-		//!
-		//! A leaf node is constant if its data is constant.
-		//! A branch node is constant if all its leaf nodes are constant.
-		virtual bool constant() const = 0;
-
-		//!\brief All nodes must evaluate.
-		//!
-		//! A leaf will evaluate to itself.
-		//! A branch will evaluate to its operation applied to its children.
-		virtual T evaluate() const = 0;
+		virtual ~branch() {}
 	};
+};
 
-	//!\brief Leaf class.
+//!\brief Implementation of the CachingPolicy used by tree.
+template<typename T>
+struct cache_on_evaluation
+{
+	//!\brief Implementation of a branch class that performs caching on evaluation.
 	//!
-	//! This class stores a copy of its data.
-	template<typename T, bool C, bool P>
-	class leaf : public node_impl<T, C, P>
+	//! A caching-on-evaluation branch will apply its operation on its children when it is evaluated
+	//! and cache that value if it is constant (e.g. if its children are of constant value).
+	class branch : public detail::default_branch<T, expression_tree::cache_on_evaluation>
 	{
-		const T d;	//!< This node's data.
+		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
+		mutable T value;		//!< This node's value, if \c cached is \c true.
+
+		using detail::default_branch<T, expression_tree::cache_on_evaluation>::f;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation>::l;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation>::r;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation>::constant;
 
 	public:
-		//! Constructor.
-		leaf(const T& d) : d(d) {}
+		//!\brief Default constructor.
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_evaluation>& l, const node<T, expression_tree::cache_on_evaluation>& r)
+			: detail::default_branch<T, expression_tree::cache_on_evaluation>(f, l, r), cached(false) {}
 
-		//! Copy constructor.
-		leaf(const leaf<T, C, P>& o) : d(o.d) {}
-
-		virtual ~leaf() {}
-
-		//!\brief Clones this object.
-		virtual leaf<T, C, P>* clone() const
-		{
-			return new leaf<T, C, P>(*this);
-		}
-
-		//! Because this classes stores a copy of its data, it is constant.
-		virtual bool constant() const
-		{
-			return true;
-		}
-
-		virtual T evaluate() const
-		{
-			return d;
-		}
-	};
-
-	//!\brief Leaf class specialized to T*.
-	//!
-	//! This class stores a pointer to data.
-	template<typename T, bool C, bool P>
-	class leaf<T*, C, P> : public node_impl<T, C, P>
-	{
-		const T *p;		//!< This node's pointer to data.
-
-	public:
-		//! Constructor.
-		leaf(const T* p) : p(p) {}
-
-		//! Copy constructor.
-		leaf(const leaf<T, C, P>& o) : p(o.p) {}
-
-		virtual ~leaf() {}
-
-		//!\brief Clones this object.
-		virtual leaf<T*, C, P>* clone() const
-		{
-			return new leaf<T*, C, P>(*this);
-		}
-
-		//! Because this class stores a pointer to its data, it is not constant.
-		virtual bool constant() const
-		{
-			return false;
-		}
-
-		virtual T evaluate() const
-		{
-			return *p;
-		}
-	};
-
-	//!\brief Branch class.
-	//!
-	//! This class stores an operation and two children nodes.
-	//! The default implementation does \a no caching optimization.
-	template<typename T, bool C, bool P>
-	class branch : public node_impl<T, C, P>
-	{
-		typename operation<T>::t f;	//!< Operation to be applied to this node's children.
-		node<T, C, P> l, r;			//!< This node's children.
-
-	public:
-		//! Constructor.
-		branch(const typename operation<T>::t& f) : f(f) {}
-
-		//! Copy constructor.
-		branch(const branch<T, C, P>& o) : f(o.f), l(o.l), r(o.r) {}
+		//!\brief Copy constructor.
+		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_evaluation>(o), cached(o.cached), value(o.value) {}
 
 		virtual ~branch() {}
 
-		//!\brief Clones this object.
-		virtual branch<T, C, P>* clone() const
-		{
-			return new branch<T, C, P>(*this);
-		}
-
-		//! This will not be called.
-		virtual bool constant() const
-		{
-			return false;
-		}
-
-		//! Evaluating a branch node applies its operation on its children nodes.
+		//! If the value of this branch has been cached already, return it.
+		//! Otherwise, evaluate it and determine if this branch is constant.
+		//! If it is, considered the value as cached to re-use later.
 		virtual T evaluate() const
 		{
-			return f(l.evaluate(), r.evaluate());
-		};
+			if(cached) return value;
 
-		//!\brief This node's left child.
-		node<T, C, P>& left()
-		{
-			return l;
-		}
-
-		//!\brief This node's right child.
-		node<T, C, P>& right()
-		{
-			return r;
-		}
-	};
-
-	//!\brief Template specialization of the branch class with the caching optimization.
-	//!
-	//! The time at which to cache the value depends on template parameter \c P.
-	//! A branch will cache its value only if its children are constant.
-	//! If \c P is \c false, caching is done at evaluation.
-	//! If \c P is \c true, caching is done when its children are set or modified. It is pre-evaluated.
-	template<typename T, bool P>
-	class branch<T, true, P> : public node_impl<T, true, P>
-	{
-		typename operation<T>::t f;	//!< Operation to be applied to this node's children.
-		node<T, true, P> l, r;		//!< This node's children.
-
-		mutable bool c;				//!< Whether the value of this node is cached.
-		mutable T v;				//!< This node's value, if \c c is \c true.
-
-	public:
-		//! Constructor.
-		branch(const typename operation<T>::t& f, const node<T, true, P>& l, const node<T, true, P>& r) : f(f), l(l), r(r), c(false) {}
-
-		//! Copy constructor.
-		branch(const branch<T, true, P>& o) : f(o.f), l(o.l), r(o.r), c(o.c), v(o.v) {}
-
-		virtual ~branch() {}
-		
-		//!\brief Clones this object.
-		virtual branch<T, true, P>* clone() const
-		{
-			return new branch<T, true, P>(*this);
-		}
-
-		//! This constness of this node is dependent on the constness of its children.
-		virtual bool constant() const
-		{
-			return l.constant() && r.constant();
-		}
-
-		//! If this node's value has been cached, return it.
-		//! Else, evaluate this node's value and cache it if this node is constant.
-		virtual T evaluate() const
-		{
-			if(c) return v;
-
-			v = f(l.evaluate(), r.evaluate());
+			value = f(l.evaluate(), r.evaluate());
 
 			if(constant())
 			{
-				c = true;
+				cached = true;
 			}
 
-			return v;
-		};
+			return value;
+		}
 
-		//! Called when children are added or modified.
-		void grow()
+		//! When this branch grows (e.g. has its children modified), forget that the value was cached.
+		virtual void grow()
 		{
-			if(P && constant())
+			cached = false;
+		}
+	};
+};
+
+//!\brief Implementation of the CachingPolicy used by tree.
+template<typename T>
+struct cache_on_assignment
+{
+	//!\brief Implementation of a branch class that performs caching on assignment of its children.
+	//!
+	//! When a caching-on-assignment branch' children are assigned to, the branch checks whether its children
+	//! are constant. If they are, it applies its operation on them and caches that value.
+	class branch : public detail::default_branch<T, expression_tree::cache_on_assignment>
+	{
+		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
+		mutable T value;		//!< This node's value, if \c cached is \c true.
+
+		using detail::default_branch<T, expression_tree::cache_on_assignment>::f;
+		using detail::default_branch<T, expression_tree::cache_on_assignment>::l;
+		using detail::default_branch<T, expression_tree::cache_on_assignment>::r;
+		using detail::default_branch<T, expression_tree::cache_on_assignment>::constant;
+
+	public:
+		//!\brief Default constructor.
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_assignment>& l, const node<T, expression_tree::cache_on_assignment>& r)
+			: detail::default_branch<T, expression_tree::cache_on_assignment>(f, l, r), cached(false) {}
+
+		//!\brief Copy constructor.
+		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_assignment>(o), cached(o.cached), value(o.value) {}
+
+		virtual ~branch() {}
+
+		//! If the value of this branch has been cached already, return it.
+		virtual T evaluate() const
+		{
+			if(cached) return value;
+
+			return value = f(l.evaluate(), r.evaluate());
+		}
+		
+		//! When this branch has its children modified, check if they are constant.
+		//! If they are, perform the operation and cache the value.
+		virtual void grow()
+		{
+			if(constant())
 			{
-				// If pre-evaluation optimization is on and this node is constant, cache its value now.
-				c = true;
-				v = f(l.evaluate(), r.evaluate());
+				// If this node is constant, cache its value now.
+				cached = true;
+				value = f(l.evaluate(), r.evaluate());
 			}
 			else
 			{
 				// One or both children are not constant. This node is then not constant.
-				c = false;
-			}
-		}
-
-		//!\brief This node's left child.
-		node<T, true, P>& left()
-		{
-			return l;
-		}
-
-		//!\brief This node's right child.
-		node<T, true, P>& right()
-		{
-			return r;
-		}
-	};
-
-	//!\brief Node class.
-	//!
-	//! The default implementation does \a no caching optimization.
-	template<typename T, bool C, bool P>
-	class node
-	{
-		node_impl<T, C, P> *i;	//!< Follows the pimpl idiom.
-
-	public:
-		//! Constructor.
-		node() : i(0) {}
-
-		//! Copy constructor.
-		node(const node<T, C, P>& o) : i(o.i->clone()) {}
-
-		//! Assignment operator.
-		node<T, C, P>& operator=(const node<T, C, P>& o)
-		{
-			if(this != &o)
-			{
-				node_impl<T, C, P>* c = o.i->clone();
-
-				if(i)
-				{
-					delete i;
-				}
-
-				i = c;
-			}
-
-			return *this;
-		}
-
-		virtual ~node()
-		{
-			if(i)
-			{
-				delete i;
-			}
-		}
-
-		//!\brief Assign a value to this node.
-		//!
-		//! The assignment of a \c T designates this node as a leaf node.
-		//! A node can still become a branch node by assigning an operation to it.
-		node<T, C, P>& operator=(const T& t)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new leaf<T, C, P>(t);
-
-			return *this;
-		}
-
-		//!\brief Assign a pointer to this node.
-		//!
-		//! The assignment of a \c T* designates this node as a leaf node.
-		//! A node can still become a branch node by assigning an operation to it.
-		node<T, C, P>& operator=(const T* t)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new leaf<T*, C, P>(t);
-
-			return *this;
-		}
-
-		//!\brief Assign an operation to this node.
-		//!
-		//! The assignment of an operation designates this node as a branch node.
-		//! A node can still become a leaf node by assigning data to it.
-		node<T, C, P>& operator=(const typename operation<T>::t& f)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new branch<T, C, P>(f);
-
-			return *this;
-		}
-
-		//!\brief This node's left child.
-		//!
-		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, C, P>& left()
-		{
-			return dynamic_cast<branch<T, C, P>*>(i)->left();
-		}
-
-		//!\brief This node's right child.
-		//!
-		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, C, P>& right()
-		{
-			return dynamic_cast<branch<T, C, P>*>(i)->right();
-		}
-
-		//!\brief Evaluates the value of this node.
-		T evaluate() const
-		{
-			return i->evaluate();
-		}
-	};
-
-	//! Template specialization of the node class with the caching optimization.
-	template<typename T, bool P>
-	class node<T, true, P>
-	{
-		node_impl<T, true, P> *i;	//!< Follows the pimpl idiom.
-
-		node<T, true, P> *p;		//!< Pointer to this node's parent.
-
-	public:
-		//! Constructor.
-		node(node<T, true, P> *p = 0) : i(0), p(p) {}
-
-		//! Copy constructor.
-		node(const node<T, true, P>& o) : i(o.i ? o.i->clone() : 0), p(o.p) {}
-
-		//! Assignment operator.
-		node<T, true, P>& operator=(const node<T, true, P>& o)
-		{
-			if(this != &o)
-			{
-				node_impl<T, true, P>* c = o.i->clone();
-
-				if(i)
-				{
-					delete i;
-				}
-
-				i = c;
-				p = o.p;
-
-				if(p)
-				{
-					p->grow();
-				}
-			}
-
-			return *this;
-		}
-
-		virtual ~node()
-		{
-			if(i)
-			{
-				delete i;
-			}
-		}
-
-		//!\brief Assign a value to this node.
-		//!
-		//! The assignment of a \c T designates this node as a leaf node.
-		//! A node can still become a branch node by assigning an operation to it.
-		node<T, true, P>& operator=(const T& t)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new leaf<T, true, P>(t);
-
-			if(p)
-			{
-				p->grow();
-			}
-
-			return *this;
-		}
-
-		//!\brief Assign a pointer to this node.
-		//!
-		//! The assignment of a \c T* designates this node as a leaf node.
-		//! A node can still become a branch node by assigning an operation to it.
-		node<T, true, P>& operator=(const T* t)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new leaf<T*, true, P>(t);
-
-			if(p)
-			{
-				p->grow();
-			}
-
-			return *this;
-		}
-
-		//!\brief Assign an operation to this node.
-		//!
-		//! The assignment of an operation designates this node as a branch node.
-		//! A node can still become a leaf node by assigning data to it.
-		node<T, true, P>& operator=(const typename operation<T>::t& f)
-		{
-			if(i)
-			{
-				delete i;
-			}
-
-			i = new branch<T, true, P>(f, node<T, true, P>(this), node<T, true, P>(this));
-
-			if(p)
-			{
-				p->grow();
-			}
-
-			return *this;
-		}
-
-		//!\brief This node's left child.
-		//!
-		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, true, P>& left()
-		{
-			return dynamic_cast<branch<T, true, P>*>(i)->left();
-		}
-
-		//!\brief This node's right child.
-		//!
-		//! Note that if this node is a leaf node, behavior is undefined.
-		node<T, true, P>& right()
-		{
-			return dynamic_cast<branch<T, true, P>*>(i)->right();
-		}
-
-		//!\brief Constness of this node.
-		bool constant() const
-		{
-			return i ? i->constant() : false;
-		}
-
-		//!\brief Evaluates the value of this node.
-		T evaluate() const
-		{
-			return i->evaluate();
-		}
-
-		//!\brief Called when this node is assigned to and pre-evaluation optimization is enabled.
-		//!
-		//! Recursively pre-evaluates this branch and this its parents.
-		//! If this function ends up being called when this node is a leaf,
-		//! it is indicative of user error.
-		void grow()
-		{
-			dynamic_cast<branch<T, true, P>*>(i)->grow();
-
-			if(p)
-			{
-				p->grow();
+				cached = false;
 			}
 		}
 	};
-}
+};
 
 //!\brief Implements an expression tree.
 //!
 //!\param T The data type.
-//!\param C Whether to cache the value of constant branches.
-//!\param P If C is \c true, whether to pre-evaluate branches of constant value.
-template<typename T, bool C = false, bool P = false>
-class expression_tree : public detail::node<T, C, P>
+//!\param CachingPolicy Caching optimization policy to use. Choices are:
+//! - no_caching: no caching optimization is performed.
+//! - cache_on_evaluation: caching of branches' values is performed when they are evaluated.
+//! - cache_on_assignment: caching of branches' values is performed when they are modified.
+template<typename T, template<typename> class CachingPolicy = no_caching>
+class tree : public node<T, CachingPolicy>
 {
 public:
-	typedef typename expression_tree<T, true, false> caching;		//!< Convenience typedef.
-	typedef typename expression_tree<T, true, true> preevaluating;	//!< Convenience typedef.
-
-	virtual ~expression_tree() {}
+	virtual ~tree() {}
 
 	//!\brief This tree's root node.
-	detail::node<T, C, P>& root()
+	node<T, CachingPolicy>& root()
 	{
 		return *this;
 	}
 };
 
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
+}
 
 #endif
 
@@ -598,7 +551,7 @@ public:
 An expression tree is a tree that stores data in its leaf nodes and operations in its branch nodes.
 The tree's value can then be obtained by performing a preorder traversal, recursively applying the branch nodes's operations to their children.
 
-For example, his tree evaluates to (2 * 1 + (2 - \a x)):
+For example, this tree evaluates to (2 * 1 + (2 - \a x)):
 
 \code
 (2 * l + r)
@@ -620,19 +573,22 @@ This implementation:
  - has been tested with g++ 4.2.1, VS 2008 and VS2010.
    Later versions of g++ probably do not require the extra \c <tr1/functional> header inclusion (may not hurt) or the \c std::tr1 macro (may hurt).
 
-In order to be evaluated, the expression_tree must be correctly formed.
+In order to be evaluated, the tree must be correctly formed.
 That is, all its branch nodes' children nodes must have been given a value.
 
 \section optimizations Optimizations
 
 Two different optimizations are available. Both cache the value of a constant branch.
-One caches it when a branch is first evaluated. The other, when a branch's children are assigned to.
+A branch is considered constant when all its children are constant, be they branches or leaves.
+A leaf is considered constant when its value is assigned a constant value rather than a variable value (i.e. a pointer).
 
-\subsection caching Caching-on-evaluation optimization
+The first optimization caches a branch's value when a it is first evaluated. The second optimziation, when a branch's children are assigned to.
 
-By instantiating an expression_tree with its second template parameter set to \c true and its third template parameter to \c false, 
-a tree's evaluation will be optimzed by caching-on-evaluation.
-Caching on evaluation simply consists on remembering a branch's value if that branch is considered constant.
+\subsection evaluation Caching-on-evaluation optimization
+
+By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
+\link expression_tree::cache_on_evaluation cache_on_evaluation \endlink, a tree's evaluation will be optimzed by caching-on-evaluation.
+Caching on evaluation simply consists on remembering a branch's value at the time it is evaluated, if that branch is considered constant.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch, C<SUB>n</SUB> is a constant value and x<SUB>n</SUB> is a variable value:
 
@@ -649,12 +605,13 @@ If C<SUB>2</SUB> and C<SUB>3</SUB> don't change (i.e. if they are not assigned a
 the second time the tree is evaluated, the evaluation of B<SUB>2</SUB> will return its cached value.
 It will not perform its operation on its children again.
 
-\subsection pre-evaluating Caching-on-modification optimization
+Because one of B<SUB>1</SUB> children is not constant, evaluating B<SUB>1</SUB> will always perform its operation on its two children.
 
-By instantiating an expression_tree with its second and third template parameter set to \c true, 
-a tree's evaluation will be optimzed by caching-on-modification, or pre-evaluation of a branch's value.
-Pre-evaluation happens when a branch's children nodes are assigned to.
-If all of a branch's childrens (branches or leaves) are constant, the branch's value is evaluated and cached.
+\subsection modification Caching-on-modification optimization
+
+By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
+\link expression_tree::cache_on_modification cache_on_modification \endlink, a tree's evaluation will be optimzed by caching-on-modification.
+Caching-on-modification means that when a branch's children nodes are assigned to, and if those children are constant, the branch's value is evaluated and cached.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch and C<SUB>n</SUB> is a constant value:
 
@@ -666,13 +623,14 @@ C1  B2
   C2  C3
 \endcode
 
-If this tree is built in the following order: B<SUB>1</SUB>, C<SUB>1</SUB>, B<SUB>2</SUB>, C<SUB>2</SUB>, C<SUB>3</SUB>, 
-upon assignment of C<SUB>3</SUB>, B<SUB>2</SUB> will be found to be of constant value and be pre-evaluated.
+Let's assume that that tree is constructed in the following order: B<SUB>1</SUB>, C<SUB>1</SUB>, B<SUB>2</SUB>, C<SUB>2</SUB>, C<SUB>3</SUB>.
+
+Upon assignment of C<SUB>3</SUB>, B<SUB>2</SUB> will be found to be of constant value and be pre-evaluated.
 This pre-evaluation will continue recursively up the tree for as long as a branch's both children are constant.
 In this case, B<SUB>1</SUB> will also be pre-evaluated.
 
 If C<SUB>1</SUB> had instead been a variable (e.g. \a x), only B<SUB>2</SUB> will have been pre-evaluated.
-B<SUB>1</SUB>, not having both its children constant, will be evaluated when expression_tree::evaluate() is called.
+Evaluating B1 would then always perform its operation on its two children.
 
 \subsubsection degenerate Degenerate case of caching-on-modification optimization
 
@@ -694,11 +652,13 @@ C1  B2
           Cn  Cn+1
 \endcode
 
+Let's assume that that tree is constructed in the following order: B<SUB>1</SUB>, C<SUB>1</SUB>, B<SUB>2</SUB>, C<SUB>2</SUB>, ..., B<SUB>n</SUB>, C<SUB>n</SUB>, C<SUB>n+1</SUB>.
+
 Before C<SUB>n+1</SUB> is assigned to, none of the tree has been pre-evaluated, given that none of its nodes' constness can be confirmed.
 When C<SUB>n+1</SUB> is assigned to, B<SUB>n</SUB> will be found constant and be evaluated.
 B<SUB>n-1</SUB> will also be found constant and be evaluated.
 This will continue until entire tree is evaluated.
-Thus, a single assignment can trigger the equivalent of expression_tree::evaluate().
+Thus, a single assignment can trigger the equivalent of \link expression_tree::tree::evaluate() tree::evaluate() \endlink.
 
 \section improvements Future improvements
 
@@ -706,188 +666,7 @@ Thus, a single assignment can trigger the equivalent of expression_tree::evaluat
 
 \section sample Sample code
 
-\code
-#include "expression_tree.h"
-
-#include <iostream>
-#include <string>
-
-using namespace std;
-
-int main()
-{
-    // Create an int tree that will not cache values.
-    expression_tree<int, false> eti;
-
-    // Let's build the simplest of trees, a singe leaf:
-    //
-    //        3
-
-    eti.root() = 3;
-
-    cout << eti.evaluate() << endl; // Prints "3".
-
-
-    // Let's build a more complex tree:
-    //
-    //  (2 * l + r)
-    //   /       \
-    //  1      (l - r)
-    //          /   \
-    //        2      3
-
-    eti.root() = [](int i, int j){ return 2 * i + j; }; // Will change root node from leaf to branch.
-    eti.root().left() = 1;
-    eti.root().right() = minus<int>();
-    eti.root().right().left() = 2;
-    eti.root().right().right() = 3;
-
-    cout << eti.evaluate() << endl; // Prints "1" (2 * 1 + (2 - 3)).
-
-    // Re-evaluate the tree.
-    // Because it is a non-pre-evaluating tree, all nodes will be re-visited and all operations re-applied.
-    cout << eti.evaluate() << endl;
-
-    // Let's change the tree a bit. Make one leaf a variable:
-    //
-    //  (2 * l + r)
-    //   /       \
-    //  1      (l - r)
-    //          /   \
-    //        2      x
-
-    // Assign a variable to the rightmost leaf.
-    int x = 1;
-    eti.root().right().right() = &x;
-
-    cout << eti.evaluate() << endl; // Prints "3" (2 * 1 + (2 - 1)).
-
-    // Change the value of that variable and re-evaluate.
-    x = 2;
-
-    cout << eti.evaluate() << endl; // Prints "2" (2 * 1 + (2 - 2)).
-
-
-    // Create a string tree with caching-on-evaluation optimization.
-    expression_tree<string, true, false> etsc;
-    
-    // Let's build this tree:
-    //
-    //    (l + r)
-    //  /         \
-    // s        (l + r)
-    //           /   \
-    //         " "  "tree"
-
-    string s = "expression";
-
-    etsc.root() = plus<string>();
-    etsc.root().left() = &s;
-    etsc.root().right() = plus<string>();
-    etsc.root().right().left() = string(" ");
-    etsc.root().right().right() = string("tree");
-
-    cout << etsc.evaluate() << endl; // Prints "expression tree".
-
-    // Change the value of variable s and re-evaluate.
-    // Because this is a caching tree, constant branches will not be re-evaluated.
-    // For this tree, it means the concatenation of " " and "tree" will not be performed again.
-    s = "apple";
-
-    cout << etsc.evaluate() << endl; // Prints "apple tree".
-
-    // But hwat happens if we do change the value of one the leaves that had a constant values?
-    // expression_tree will do the right thing, and discard the previously cached value.
-
-    etsc.root().right().right() = string("pie");
-
-    cout << etsc.evaluate() << endl; // Prints "apple pie".
-
-
-    // Demonstration of a caching-on-modification tree with its degenerate case.
-
-    // Let's build this tree:
-    //
-    //
-    // (l + r)
-    //  /   \
-    // 1   (l + r)
-    //      /   \
-    //     2   (l + r)
-    //          /   \
-    //         3     4
-
-    expression_tree<int, true, true> etip;
-
-    etip.root() = plus<int>();
-    etip.root().left() = 1;
-    etip.root().right() = plus<int>();
-    etip.root().right().left() = 2;
-    etip.root().right().right() = plus<int>();
-    etip.root().right().right().left() = 3;
-    etip.root().right().right().right() = 4; // Right here, the entire tree will be evaluated.
-
-    cout << etip.evaluate() << endl; // Prints "10". Even the first time this tree is evaluated, its value is already cached!
-
-    etip.root().right().right().right() = 5; // Again, the entire tree will be evaluated.
-
-    cout << etip.evaluate() << endl; // Prints "11".
-
-    
-    // Here's an example of copying a tree (or sub-tree) to another tree's node.
-    expression_tree<int, true> etic;
-
-    // We first build a simple tree:
-    //
-    //  (l + r)
-    //  /    \
-    // y      2
-
-    int y = 2;
-
-    etic.root() = plus<int>();
-    etic.left() = &y;
-    etic.right() = 2;
-
-    cout << etic.evaluate() << endl; // Prints "4" (y + 2).
-
-    // Then we build on it (using its own nodes!):
-    //
-    //     (l + r)
-    //      /   \
-    // (l + r)   2
-    //  /   \
-    // y     2
-
-    etic.left() = etic.root();
-
-    // Let's make it even bigger:
-    //
-    //     (l + r)
-    //      /   \
-    // (l + r)  (l + r)
-    //  /   \    /   \
-    // y     2  y     2
-
-    etic.right() = etic.left();
-
-    cout << etic.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
-
-
-    // Misues.
-
-    expression_tree<float, true> crash;
-    //crash.evaluate(); // The tree is empty.
-
-    crash.root() = divides<float>();
-    //crash.evaluate(); // This tree cannot be evaluated, its root node is an operation with no data children to operate on.
-
-    crash.root() = 2.;
-    //crash.root().left() = divides<float>(); // Assigning to a data node's children is undefined behavior.
-
-    return 0;
-}
-\endcode
+\include examples.cpp
 
 \section license License
 
