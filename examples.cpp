@@ -6,16 +6,15 @@
 using namespace std;
 
 //!\cond
-
+// We'll use this if we think the compiler doesn't support lambdas.
 template<typename T>
 struct functor
 {
-	T operator()(const T& l, const T& r)
-	{
-		return 2 * l + r;
-	}
+    T operator()(const T& l, const T& r)
+    {
+        return 2 * l + r;
+    }
 };
-
 //!\endcond
 
 int main()
@@ -40,12 +39,12 @@ int main()
     //          /   \
     //        2      3
 
-	// For Visual Studio 2010, we'll assign a lambda to the root node.
-	// For other comilers, we'll assign the functor defined above.
-#if defined(__GNUG__) || (defined(_MSC_VER) && (_MSC_VER >= 1500 && _MSC_VER < 1600))
+    // For Visual Studio 2010 or g++ 4.5.x and above, we'll assign a lambda to the root node.
+    // For other compilers, we'll assign the functor defined above.
+#if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
     tinc.root() = functor<int>();
 #else
-	tinc.root() = [](int i, int j){ return 2 * i + j; };
+    tinc.root() = [](int i, int j){ return 2 * i + j; };
 #endif
 
     tinc.root().left() = 1;

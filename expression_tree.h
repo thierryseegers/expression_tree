@@ -29,19 +29,21 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
-#include <functional>	// Eventually, that's all we'll need.
-
-#if defined(__GNUG__)
-#include <tr1/functional>	// Needed for g++ 4.2.x.
-#endif
+#include <functional>	// Eventually, that's all we'll need for all compilers.
 
 //!\cond
 
+#define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+
+#if (defined(__GNUG__) && (GCC_VERSION < 40500))
+#include <tr1/functional>	// Needed for g++ up to 4.4.x.
+#endif
+
 // Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
-#if defined(__GNUG__) || (defined(_MSC_VER) && (_MSC_VER >= 1500 && _MSC_VER < 1600))
-#define tr1_ std::tr1	// For g++ 4.2.x and VS 2008, the function class is in the std::tr1 namespace.
+#if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
+#define tr1_ std::tr1	// For g++ up to 4.4.x or for VS 2008, the function class is in the std::tr1 namespace.
 #else
-#define tr1_ std		// For VS 2010, the function class is in the std namespace.
+#define tr1_ std		// For g++ 4.5.x and VS 2010, the function class is in the std namespace.
 #endif
 
 //!\endcond
@@ -576,8 +578,7 @@ This implementation:
  - is dependent on C++0x's function<> class.
  - requires RTTI.
  - has little in the way of safety checks.
- - has been tested with g++ 4.2.1, VS 2008 and VS2010.
-   Later versions of g++ probably do not require the extra \c <tr1/functional> header inclusion (may not hurt) or the \c std::tr1 macro (may hurt).
+ - has been tested with g++ 4.2.1, g++ 4.5.0, VS 2008 and VS2010.
 
 In order to be evaluated, the tree must be correctly formed.
 That is, all its branch nodes' children nodes must have been given a value.
