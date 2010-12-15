@@ -5,6 +5,19 @@
 
 using namespace std;
 
+//!\cond
+
+template<typename T>
+struct functor
+{
+	T operator()(const T& l, const T& r)
+	{
+		return 2 * l + r;
+	}
+};
+
+//!\endcond
+
 int main()
 {
     // Create an int tree that will not cache values.
@@ -27,7 +40,14 @@ int main()
     //          /   \
     //        2      3
 
-    tinc.root() = [](int i, int j){ return 2 * i + j; }; // Will change root node from leaf to branch.
+	// For Visual Studio 2010, we'll assign a lambda to the root node.
+	// For other comilers, we'll assign the functor defined above.
+#if defined(__GNUG__) || (defined(_MSC_VER) && (_MSC_VER >= 1500 && _MSC_VER < 1600))
+    tinc.root() = functor<int>();
+#else
+	tinc.root() = [](int i, int j){ return 2 * i + j; };
+#endif
+
     tinc.root().left() = 1;
     tinc.root().right() = minus<int>();
     tinc.root().right().left() = 2;

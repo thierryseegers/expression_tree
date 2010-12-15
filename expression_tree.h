@@ -35,12 +35,16 @@
 #include <tr1/functional>	// Needed for g++ 4.2.x.
 #endif
 
-// For g++ 4.2.x and VS 2008, the function class is in the std::tr1 namespace.
+//!\cond
+
+// Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
 #if defined(__GNUG__) || (defined(_MSC_VER) && (_MSC_VER >= 1500 && _MSC_VER < 1600))
-#define tr1_ std::tr1
+#define tr1_ std::tr1	// For g++ 4.2.x and VS 2008, the function class is in the std::tr1 namespace.
 #else
-#define tr1_ std	// For VS 2010, the function class is in the std namespace.
+#define tr1_ std		// For VS 2010, the function class is in the std namespace.
 #endif
+
+//!\endcond
 
 namespace expression_tree
 {
@@ -537,6 +541,8 @@ public:
 #endif
 
 /*!
+\file expression_tree.h \brief The only file you need.
+
 \mainpage expression_tree
 
 \li \ref introduction
@@ -586,8 +592,8 @@ The first optimization caches a branch's value when a it is first evaluated. The
 
 \subsection evaluation Caching-on-evaluation optimization
 
-By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
-\link expression_tree::cache_on_evaluation cache_on_evaluation \endlink, a tree's evaluation will be optimzed by caching-on-evaluation.
+By instantiating a \link expression_tree::tree tree\endlink with its second template parameter set to 
+\link expression_tree::cache_on_evaluation cache_on_evaluation\endlink, a tree's evaluation will be optimzed by caching-on-evaluation.
 Caching on evaluation simply consists on remembering a branch's value at the time it is evaluated, if that branch is considered constant.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch, C<SUB>n</SUB> is a constant value and x<SUB>n</SUB> is a variable value:
@@ -607,11 +613,11 @@ It will not perform its operation on its children again.
 
 Because one of B<SUB>1</SUB> children is not constant, evaluating B<SUB>1</SUB> will always perform its operation on its two children.
 
-\subsection modification Caching-on-modification optimization
+\subsection modification Caching-on-assignment optimization
 
-By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
-\link expression_tree::cache_on_modification cache_on_modification \endlink, a tree's evaluation will be optimzed by caching-on-modification.
-Caching-on-modification means that when a branch's children nodes are assigned to, and if those children are constant, the branch's value is evaluated and cached.
+By instantiating a \link expression_tree::tree tree\endlink with its second template parameter set to 
+\link expression_tree::cache_on_assignment cache_on_assignment\endlink, a tree's evaluation will be optimzed by caching-on-assignment.
+Caching-on-assignment means that when a branch's children nodes are assigned to, and if those children are constant, the branch's value is evaluated and cached.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch and C<SUB>n</SUB> is a constant value:
 
@@ -667,6 +673,8 @@ Thus, a single assignment can trigger the equivalent of \link expression_tree::t
 \section sample Sample code
 
 \include examples.cpp
+
+\note If you don't see the sample code, add \c "./" (without quotes) to your Doxyfile's EXAMPLE_PATH. The sample code is linked to \c examples.cpp.
 
 \section license License
 
