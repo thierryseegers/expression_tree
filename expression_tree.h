@@ -569,6 +569,9 @@ For example, this tree evaluates to (2 * 1 + (2 - \a x)):
       2      x
 \endcode
 
+To build an expression tree with expression_tree::tree, you assign <a href="http://www.google.com/search?q=c%2B%2B+function+object">function objects</a> to branch nodes and either constant values or pointers to variables to leaf nodes.
+When your tree is built, call \link expression_tree::tree::evaluate evaluate \endlink on it to get its value.
+
 \section considerations Technical considerations
 
 This implementation:
@@ -614,7 +617,7 @@ It will not perform its operation on its children again.
 
 Because one of B<SUB>1</SUB> children is not constant, evaluating B<SUB>1</SUB> will always perform its operation on its two children.
 
-\subsection modification Caching-on-assignment optimization
+\subsection assignment Caching-on-assignment optimization
 
 By instantiating a \link expression_tree::tree tree\endlink with its second template parameter set to 
 \link expression_tree::cache_on_assignment cache_on_assignment\endlink, a tree's evaluation will be optimzed by caching-on-assignment.
@@ -639,7 +642,7 @@ In this case, B<SUB>1</SUB> will also be pre-evaluated.
 If C<SUB>1</SUB> had instead been a variable (e.g. \a x), only B<SUB>2</SUB> will have been pre-evaluated.
 Evaluating B1 would then always perform its operation on its two children.
 
-\subsubsection degenerate Degenerate case of caching-on-modification optimization
+\subsubsection degenerate Degenerate case of caching-on-assignment optimization
 
 Given the following tree:
 
