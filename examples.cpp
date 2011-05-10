@@ -1,4 +1,7 @@
+#define EXPRESSION_TREE_ENABLE_PARALLEL_EXECUTION
 #include "expression_tree.h"
+
+#include <thread>
 
 #include <iostream>
 #include <string>
@@ -184,6 +187,43 @@ int main()
     tice.right() = n;
 
     cout << tice.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
+
+
+	// Demonstration of parallel evaluation.
+	//
+	// We build two trees with the exact same morphology, one to be evaluated linearly and another, parallely.
+	//
+	//     wait 3s
+	//      /   \
+	// wait 3s  wait 3s <- This layer will evaluate in only 3 seconds if evaluated in parallel.
+	//  /   \    /   \
+	// 0     0  0     0
+	//
+	// It should take 9 seconds to evaluate the linear tree, but only 6 to evaluate the parallel one.
+
+	// This operation does nothing except sleep for three seconds.
+	auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(3)); return nullptr; };
+
+	expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::linear> tnncs;
+	tnncs.root() = delay;
+	tnncs.left() = delay;
+	tnncs.right() = delay;
+	tnncs.left().left() = tnncs.left().right() = tnncs.right().left() = tnncs.right().right() = nullptr;
+
+	auto then = chrono::steady_clock::now();
+	tnncs.evaluate();
+	cout << "Linear tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";
+	
+	expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnnca;
+	
+	tnnca.root() = delay;
+	tnnca.left() = delay;
+	tnnca.right() = delay;
+	tnnca.left().left() = tnnca.left().right() = tnnca.right().left() = tnnca.right().right() = nullptr;
+
+	then = chrono::steady_clock::now();
+	tnnca.evaluate();
+	cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";
 
 
     // Misues.
