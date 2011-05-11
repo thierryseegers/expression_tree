@@ -29,15 +29,13 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EXECUTION)
-
-#include <future>
-
-#endif
-
 #include <functional>	// Eventually, that's all we'll need for all compilers.
 
-//!\cond
+#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#include <future>
+#endif
+
+//!\cond .
 
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 
@@ -74,17 +72,21 @@ struct operation
 
 }
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EXECUTION)
+#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
 
 //!\brief Performs parallel evaluation of a branch's children before applying its operation.
+//!
+//! This policy is available when \c EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION is defined.
+//! It is dependent on the \c \<future\> header.
 struct parallel
 {
+	//!\brief Spawns a parallel evaluation task for the left child and evaluates the right child on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
 	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
-		future<T> f = async(bind(&node<T, C, E>::evaluate, &l)), g = async(bind(&node<T, C, E>::evaluate, &r));
+		future<T> f = async(&node<T, C, E>::evaluate, &l);
 
-		return o(f.get(), g.get());
+		return o(f.get(), r.evaluate());
 	}
 };
 
@@ -93,6 +95,7 @@ struct parallel
 //!\brief Performs serialized evaluation of a branch's children before applying its operation.
 struct linear 
 {
+	//!\brief Evaluates both the left and right children on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
 	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
@@ -584,17 +587,21 @@ public:
 
 \mainpage expression_tree
 
-\li \ref introduction
-\li \ref considerations
-\li \ref optimizations
-\li \ref improvements
-\li \ref sample
-\li \ref license
+ - \ref introduction
+ - \ref considerations
+ - \ref optimizations
+  - \ref caching
+   - \ref evaluation
+   - \ref assignment
+  - \ref parallel
+ - \ref improvements
+ - \ref sample
+ - \ref license
 
 \section introduction Introduction
 
 An expression tree is a tree that stores data in its leaf nodes and operations in its branch nodes.
-The tree's value can then be obtained by performing a preorder traversal, recursively applying the branch nodes's operations to their children.
+The tree's value can then be obtained by performing a postorder traversal, applying each branch's operation to its children.
 
 For example, this tree evaluates to (2 * 1 + (2 - \a x)):
 
@@ -607,7 +614,7 @@ For example, this tree evaluates to (2 * 1 + (2 - \a x)):
 \endcode
 
 To build an expression tree with expression_tree::tree, you assign <a href="http://www.google.com/search?q=c%2B%2B+function+object">function objects</a> to branch nodes and either constant values or pointers to variables to leaf nodes.
-When your tree is built, call \link expression_tree::tree::evaluate evaluate \endlink on it to get its value.
+When your tree is built, call its \link expression_tree::tree::evaluate evaluate \endlink member function to get its value.
 
 \section considerations Technical considerations
 
@@ -615,7 +622,7 @@ This implementation:
  - is contained in a single header file.
  - uses templates heavily.
  - specializes the branches and the leaves to reduce space overhead.
- - is dependent on C++0x's function<> class.
+ - is dependent on C++0x's function<> class and, if parallel evaluation is enabled, the \c \<future\> header.
  - requires RTTI.
  - has little in the way of safety checks.
  - has been tested with g++ 4.2.1, g++ 4.5.0, VS 2008 and VS2010.
@@ -625,16 +632,25 @@ That is, all its branch nodes' children nodes must have been given a value.
 
 \section optimizations Optimizations
 
-Two different optimizations are available. Both cache the value of a constant branch.
+Two policies are vailable as template parameters to expression_tree::tree.
+The first enables caching the value of certain branches to avoid unnecessary evaluation.
+The second enables multi-threaded evaluation.
+
+\subsection caching Branch caching
+
+Caching optimizations rely on the constness of branches.
+Once a constant branch has been evaluated, it is not required to evaluate it again.
 A branch is considered constant when all its children are constant, be they branches or leaves.
 A leaf is considered constant when its value is assigned a constant value rather than a variable value (i.e. a pointer).
 
-The first optimization caches a branch's value when a it is first evaluated. The second optimziation, when a branch's children are assigned to.
+The first optimization caches a branch's value when a it is first evaluated.
+The second, more aggressive optimziation, caches when a branch's children are assigned to.
+The default policy is \link expression_tree::no_caching no_caching \endlink which performs no caching.
 
-\subsection evaluation Caching-on-evaluation optimization
+\subsubsection evaluation Caching-on-evaluation optimization
 
-By instantiating a \link expression_tree::tree tree\endlink with its second template parameter set to 
-\link expression_tree::cache_on_evaluation cache_on_evaluation\endlink, a tree's evaluation will be optimzed by caching-on-evaluation.
+By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
+\link expression_tree::cache_on_evaluation cache_on_evaluation \endlink, a tree's evaluation will be optimzed by caching-on-evaluation.
 Caching on evaluation simply consists on remembering a branch's value at the time it is evaluated, if that branch is considered constant.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch, C<SUB>n</SUB> is a constant value and x<SUB>n</SUB> is a variable value:
@@ -654,10 +670,10 @@ It will not perform its operation on its children again.
 
 Because one of B<SUB>1</SUB> children is not constant, evaluating B<SUB>1</SUB> will always perform its operation on its two children.
 
-\subsection assignment Caching-on-assignment optimization
+\subsubsection assignment Caching-on-assignment optimization
 
-By instantiating a \link expression_tree::tree tree\endlink with its second template parameter set to 
-\link expression_tree::cache_on_assignment cache_on_assignment\endlink, a tree's evaluation will be optimzed by caching-on-assignment.
+By instantiating a \link expression_tree::tree tree \endlink with its second template parameter set to 
+\link expression_tree::cache_on_assignment cache_on_assignment \endlink, a tree's evaluation will be optimzed by caching-on-assignment.
 Caching-on-assignment means that when a branch's children nodes are assigned to, and if those children are constant, the branch's value is evaluated and cached.
 
 Consider the following tree, where B<SUB>n</SUB> is a branch and C<SUB>n</SUB> is a constant value:
@@ -707,9 +723,16 @@ B<SUB>n-1</SUB> will also be found constant and be evaluated.
 This will continue until entire tree is evaluated.
 Thus, a single assignment can trigger the equivalent of \link expression_tree::tree::evaluate() tree::evaluate() \endlink.
 
+\subsection parallel Parallel evaluation
+
+This optimization depends on the availability of C++11's \c \<future\> header.
+It is enabled by defining the macro \c EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION and instantiating a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
+
+The default policy is \link expression_tree::linear linear \endlink which evalutes the tree linearly.
+
 \section improvements Future improvements
 
- - Multi-threaded evaluation perhaps? In the spirit of not having this header depend on third-party libraries, I'll wait until std::thread is more readily available.
+ - I'll think of something. I can't help myself.
 
 \section sample Sample code
 

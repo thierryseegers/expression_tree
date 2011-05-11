@@ -1,14 +1,15 @@
-#define EXPRESSION_TREE_ENABLE_PARALLEL_EXECUTION
 #include "expression_tree.h"
 
+#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#include <chrono>
 #include <thread>
+#endif
 
 #include <iostream>
 #include <string>
 
 using namespace std;
 
-//!\cond
 // We'll use this if we think the compiler doesn't support lambdas.
 template<typename T>
 struct functor
@@ -18,7 +19,6 @@ struct functor
         return 2 * l + r;
     }
 };
-//!\endcond
 
 int main()
 {
@@ -188,42 +188,52 @@ int main()
 
     cout << tice.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
 
+#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
 
-	// Demonstration of parallel evaluation.
-	//
-	// We build two trees with the exact same morphology, one to be evaluated linearly and another, parallely.
-	//
-	//     wait 3s
-	//      /   \
-	// wait 3s  wait 3s <- This layer will evaluate in only 3 seconds if evaluated in parallel.
-	//  /   \    /   \
-	// 0     0  0     0
-	//
-	// It should take 9 seconds to evaluate the linear tree, but only 6 to evaluate the parallel one.
+    // Demonstration of parallel evaluation.
+    //
+    // We build two trees with the exact same morphology, one to be evaluated linearly and another, parallely.
+    //
+    //              wait 1s
+    //             /       \
+    //      wait 1s         wait 1s
+    //      /     \         /     \  
+    // wait 1s wait 1s wait 1s wait 1s
+    //  /   \   /   \   /   \   /   \ 
+    // 0     0 0     0 0     0 0     0
+    //
+    // It should take 7 seconds to evaluate the linear tree, but less time to evaluate the parallel one.
 
-	// This operation does nothing except sleep for three seconds.
-	auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(3)); return nullptr; };
+    // This branch operation does nothing except sleep for one second.
+    auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(1)); return nullptr; };
 
-	expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::linear> tnncs;
-	tnncs.root() = delay;
-	tnncs.left() = delay;
-	tnncs.right() = delay;
-	tnncs.left().left() = tnncs.left().right() = tnncs.right().left() = tnncs.right().right() = nullptr;
+    // The linear tree.
+    expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::linear> tnncl;
+    tnncl.root() = delay;
+    tnncl.left() = delay;
+    tnncl.right() = delay;
+    tnncl.left().left() = delay;
+    tnncl.left().left().left() = tnncl.left().left().right() = nullptr;
+    tnncl.left().right() = tnncl.right().left() = tnncl.right().right() = tnncl.left().left();
 
-	auto then = chrono::steady_clock::now();
-	tnncs.evaluate();
-	cout << "Linear tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";
-	
-	expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnnca;
-	
-	tnnca.root() = delay;
-	tnnca.left() = delay;
-	tnnca.right() = delay;
-	tnnca.left().left() = tnnca.left().right() = tnnca.right().left() = tnnca.right().right() = nullptr;
+    auto then = chrono::steady_clock::now();
+    tnncl.evaluate();
+    cout << "Linear tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";    // 7 seconds.
 
-	then = chrono::steady_clock::now();
-	tnnca.evaluate();
-	cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";
+    // The parallel tree.
+    expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnncp;
+    tnncp.root() = delay;
+    tnncp.left() = delay;
+    tnncp.right() = delay;
+    tnncp.left().left() = delay;
+    tnncp.left().left().left() = tnncp.left().left().right() = nullptr;
+    tnncp.left().right() = tnncp.right().left() = tnncp.right().right() = tnncp.left().left();
+
+    then = chrono::steady_clock::now();
+    tnncp.evaluate();
+    cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";  // 3 seconds on my computer.
+
+#endif
 
 
     // Misues.
