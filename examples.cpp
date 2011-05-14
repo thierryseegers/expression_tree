@@ -192,7 +192,7 @@ int main()
 
     // Demonstration of parallel evaluation.
     //
-    // We build two trees with the exact same morphology, one to be evaluated linearly and another, parallely.
+    // We build two trees with the exact same morphology, one to be evaluated sequentially and another, parallely.
     //
     //              wait 1s
     //             /       \
@@ -202,13 +202,13 @@ int main()
     //  /   \   /   \   /   \   /   \ 
     // 0     0 0     0 0     0 0     0
     //
-    // It should take 7 seconds to evaluate the linear tree, but less time to evaluate the parallel one.
+    // It should take 7 seconds to evaluate the sequential tree, but less time to evaluate the parallel one.
 
     // This branch operation does nothing except sleep for one second.
     auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(1)); return nullptr; };
 
-    // The linear tree.
-    expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::linear> tnncl;
+    // The sequential tree.
+    expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::sequential> tnncl;
     tnncl.root() = delay;
     tnncl.left() = delay;
     tnncl.right() = delay;
@@ -218,7 +218,7 @@ int main()
 
     auto then = chrono::steady_clock::now();
     tnncl.evaluate();
-    cout << "Linear tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";    // 7 seconds.
+    cout << "sequential tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";    // 7 seconds.
 
     // The parallel tree.
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnncp;

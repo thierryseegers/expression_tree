@@ -92,8 +92,8 @@ struct parallel
 
 #endif
 
-//!\brief Performs serialized evaluation of a branch's children before applying its operation.
-struct linear 
+//!\brief Performs sequential evaluation of a branch's children before applying its operation.
+struct sequential 
 {
 	//!\brief Evaluates both the left and right children on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
@@ -275,7 +275,7 @@ public:
 //!
 //! This class stores a pointer to its implementation.
 //! The implementation node's type is derived at runtime when it is assigned to.
-template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = linear>
+template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = sequential>
 class node
 {
 	detail::node_impl<T> *impl;		//!< Follows the pimpl idiom.
@@ -565,7 +565,7 @@ struct cache_on_assignment
 //! - no_caching: no caching optimization is performed.
 //! - cache_on_evaluation: caching of branches' values is performed when they are evaluated.
 //! - cache_on_assignment: caching of branches' values is performed when they are modified.
-template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = linear>
+template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = sequential>
 class tree : public node<T, CachingPolicy, EvaluationPolicy>
 {
 public:
@@ -721,14 +721,14 @@ Before C<SUB>n+1</SUB> is assigned to, none of the tree has been pre-evaluated, 
 When C<SUB>n+1</SUB> is assigned to, B<SUB>n</SUB> will be found constant and be evaluated.
 B<SUB>n-1</SUB> will also be found constant and be evaluated.
 This will continue until entire tree is evaluated.
-Thus, a single assignment can trigger the equivalent of \link expression_tree::tree::evaluate() tree::evaluate() \endlink.
+Thus, a single assignment can trigger the equivalent of \link expression_tree::tree::evaluate() evaluate() \endlink.
 
 \subsection parallel Parallel evaluation
 
 This optimization depends on the availability of C++11's \c \<future\> header.
 It is enabled by defining the macro \c EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION and instantiating a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
 
-The default policy is \link expression_tree::linear linear \endlink which evalutes the tree linearly.
+The default policy is \link expression_tree::sequential sequential \endlink which evalutes the tree sequentially.
 
 \section improvements Future improvements
 
