@@ -1,5 +1,5 @@
 /*
-	(C) Copyright Thierry Seegers 2010. Distributed under the following license:
+	(C) Copyright Thierry Seegers 2010-2011. Distributed under the following license:
 
 	Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -586,7 +586,10 @@ public:
 #endif
 
 /*!
-\file expression_tree.h \brief The only file you need.
+\file expression_tree.h
+\brief The only file you need.
+\author Thierry Seegers
+\version 3.0
 
 \mainpage expression_tree
 
