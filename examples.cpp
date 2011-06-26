@@ -1,6 +1,6 @@
 #include "expression_tree.h"
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#if defined(EXPRESSION_TREE_HAS_FUTURE)
 #include <chrono>
 #include <thread>
 #endif
@@ -188,7 +188,7 @@ int main()
 
     cout << tice.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#if defined(EXPRESSION_TREE_HAS_FUTURE)
 
     // Demonstration of parallel evaluation.
     //

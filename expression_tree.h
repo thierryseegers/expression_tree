@@ -31,7 +31,7 @@
 
 #include <functional>	// Eventually, that's all we'll need for all compilers.
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#if defined(EXPRESSION_TREE_HAS_FUTURE)
 #include <future>
 #endif
 
@@ -55,7 +55,7 @@
 namespace expression_tree
 {
 
-template<typename T, template<typename, typename> class CachingPolicy, class EvaluationPolicy>
+template<typename T, template<typename, typename> class CachingPolicy, class ThreadingPolicy>
 class node;
 
 namespace detail
@@ -72,11 +72,11 @@ struct operation
 
 }
 
-#if defined(EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION)
+#if defined(EXPRESSION_TREE_HAS_FUTURE)
 
 //!\brief Performs parallel evaluation of a branch's children before applying its operation.
 //!
-//! This policy is available when \c EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION is defined.
+//! This policy is available when \c EXPRESSION_TREE_HAS_FUTURE is defined.
 //! It is dependent on the \c \<future\> header.
 struct parallel
 {
@@ -84,7 +84,7 @@ struct parallel
 	template<typename T, template<typename, typename> class C, class E>
 	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
-		future<T> f = async(&node<T, C, E>::evaluate, &l);
+		future<T> f = std::async(&node<T, C, E>::evaluate, &l);
 
 		return o(f.get(), r.evaluate());
 	}
@@ -93,9 +93,9 @@ struct parallel
 #endif
 
 //!\brief Performs sequential evaluation of a branch's children before applying its operation.
-struct sequential 
+struct sequential
 {
-	//!\brief Evaluates both the left and right children on the current thread.
+	//!\brief Evaluates the right child and then the left child on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
 	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
@@ -211,12 +211,12 @@ public:
 //!
 //! This class stores an operation and two children nodes.
 //! This default implementation does \a no caching optimization.
-template<typename T, template<typename, typename> class CachingPolicy, class EvaluationPolicy>
+template<typename T, template<typename, typename> class CachingPolicy, class ThreadingPolicy>
 class default_branch : public node_impl<T>
 {
 public:
-	node<T, CachingPolicy, EvaluationPolicy> l;	//!< This branch's left child.
-	node<T, CachingPolicy, EvaluationPolicy> r;	//!< This branch's right child.
+	node<T, CachingPolicy, ThreadingPolicy> l;	//!< This branch's left child.
+	node<T, CachingPolicy, ThreadingPolicy> r;	//!< This branch's right child.
 	typename operation<T>::t f;	//!< Operation to be applied to this node's children.
 	
 	//!\brief Constructor.
@@ -224,17 +224,17 @@ public:
 	//!\param f The operation to apply to this branch's children,
 	//!\param l This branch's left child.
 	//!\param r This branch's right child.
-	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy, EvaluationPolicy>& l, const node<T, CachingPolicy, EvaluationPolicy>& r) : f(f), l(l), r(r) {}
+	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy, ThreadingPolicy>& l, const node<T, CachingPolicy, ThreadingPolicy>& r) : f(f), l(l), r(r) {}
 
 	//!\brief Copy constructor.
-	default_branch(const default_branch<T, CachingPolicy, EvaluationPolicy>& other) : f(other.f), l(other.l), r(other.r) {}
+	default_branch(const default_branch<T, CachingPolicy, ThreadingPolicy>& other) : f(other.f), l(other.l), r(other.r) {}
 	
 	virtual ~default_branch() {}
 
 	//!\brief Clones this object.
-	virtual default_branch<T, CachingPolicy, EvaluationPolicy>* clone() const
+	virtual default_branch<T, CachingPolicy, ThreadingPolicy>* clone() const
 	{
-		return new default_branch<T, CachingPolicy, EvaluationPolicy>(*this);
+		return new default_branch<T, CachingPolicy, ThreadingPolicy>(*this);
 	}
 
 	//! The constness of a branch is determined by the constness of its children.
@@ -246,17 +246,17 @@ public:
 	//! Evaluating a branch applies its operation on its children.
 	virtual T evaluate() const
 	{
-		return EvaluationPolicy::evaluate(f, l, r);
+		return ThreadingPolicy::evaluate(f, l, r);
 	}
 
 	//!\brief This branch's left child.
-	virtual node<T, CachingPolicy, EvaluationPolicy>& left()
+	virtual node<T, CachingPolicy, ThreadingPolicy>& left()
 	{
 		return l;
 	}
 
 	//!\brief This branch's right child.
-	virtual node<T, CachingPolicy, EvaluationPolicy>& right()
+	virtual node<T, CachingPolicy, ThreadingPolicy>& right()
 	{
 		return r;
 	}
@@ -275,23 +275,23 @@ public:
 //!
 //! This class stores a pointer to its implementation.
 //! The implementation node's type is derived at runtime when it is assigned to.
-template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = sequential>
+template<typename T, template<typename, typename> class CachingPolicy = no_caching, class ThreadingPolicy = sequential>
 class node
 {
 	detail::node_impl<T> *impl;		//!< Follows the pimpl idiom.
-	node<T, CachingPolicy, EvaluationPolicy> *parent; //!< This node's parent. Ends up unused when no caching occurs.
+	node<T, CachingPolicy, ThreadingPolicy> *parent; //!< This node's parent. Ends up unused when no caching occurs.
 
 public:
 	//!\brief Default constructor.
 	//!
 	//!\param parent Pointer to this node's parent.
-	node(node<T, CachingPolicy, EvaluationPolicy> *parent = 0) : impl(0), parent(parent) {}
+	node(node<T, CachingPolicy, ThreadingPolicy> *parent = 0) : impl(0), parent(parent) {}
 
 	//!\brief Copy constructor.
-	node(const node<T, CachingPolicy, EvaluationPolicy>& other) : impl(other.impl ? other.impl->clone() : 0), parent(other.parent) {}
+	node(const node<T, CachingPolicy, ThreadingPolicy>& other) : impl(other.impl ? other.impl->clone() : 0), parent(other.parent) {}
 
 	//!\brief Assignment operator.
-	node<T, CachingPolicy, EvaluationPolicy>& operator=(const node<T, CachingPolicy, EvaluationPolicy>& other)
+	node<T, CachingPolicy, ThreadingPolicy>& operator=(const node<T, CachingPolicy, ThreadingPolicy>& other)
 	{
 		if(this != &other)
 		{
@@ -326,7 +326,7 @@ public:
 	//!
 	//! The assignment of a \c T designates this node as a leaf node.
 	//! A leaf can still be changed to a branch by assigning an operation to it.
-	node<T, CachingPolicy, EvaluationPolicy>& operator=(const T& t)
+	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T& t)
 	{
 		if(impl)
 		{
@@ -347,7 +347,7 @@ public:
 	//!
 	//! The assignment of a \c T* designates this node as a leaf node.
 	//! A leaf can still be changed to a branch by assigning an operation to it.
-	node<T, CachingPolicy, EvaluationPolicy>& operator=(const T* t)
+	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T* t)
 	{
 		if(impl)
 		{
@@ -368,7 +368,7 @@ public:
 	//!
 	//! The assignment of an operation designates this node as a branch.
 	//! A branch can still be changed to a leaf by assigning data to it.
-	node<T, CachingPolicy, EvaluationPolicy>& operator=(const typename detail::operation<T>::t& f)
+	node<T, CachingPolicy, ThreadingPolicy>& operator=(const typename detail::operation<T>::t& f)
 	{
 		if(impl)
 		{
@@ -376,7 +376,7 @@ public:
 		}
 
 		// Create a new branch with the passed operation and two nodes with this node as their parent.
-		impl = new typename CachingPolicy<T, EvaluationPolicy>::branch(f, node<T, CachingPolicy, EvaluationPolicy>(this), node<T, CachingPolicy, EvaluationPolicy>(this));
+		impl = new typename CachingPolicy<T, ThreadingPolicy>::branch(f, node<T, CachingPolicy, ThreadingPolicy>(this), node<T, CachingPolicy, ThreadingPolicy>(this));
 
 		if(parent)
 		{
@@ -389,17 +389,17 @@ public:
 	//!\brief This node's left child.
 	//!
 	//! Note that if this node is a leaf node, behavior is undefined.
-	node<T, CachingPolicy, EvaluationPolicy>& left()
+	node<T, CachingPolicy, ThreadingPolicy>& left()
 	{
-		return dynamic_cast<typename CachingPolicy<T, EvaluationPolicy>::branch*>(impl)->left();
+		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->left();
 	}
 
 	//!\brief This node's right child.
 	//!
 	//! Note that if this node is a leaf node, behavior is undefined.
-	node<T, CachingPolicy, EvaluationPolicy>& right()
+	node<T, CachingPolicy, ThreadingPolicy>& right()
 	{
-		return dynamic_cast<typename CachingPolicy<T, EvaluationPolicy>::branch*>(impl)->right();
+		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->right();
 	}
 
 	//!\brief Constness of this node.
@@ -419,7 +419,7 @@ public:
 	//! Recursively notifies parent nodes of the growth that happened.
 	void grow()
 	{
-		dynamic_cast<typename CachingPolicy<T, EvaluationPolicy>::branch*>(impl)->grow();
+		dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->grow();
 
 		if(parent)
 		{
@@ -429,52 +429,52 @@ public:
 };
 
 //!\brief Implementation of the CachingPolicy used by tree.
-template<typename T, class EvaluationPolicy>
+template<typename T, class ThreadingPolicy>
 struct no_caching
 {
 	//!\brief Implementation of a branch class that performs no caching.
 	//!
 	//! This class performs no optimization.
 	//! A non-caching branch will apply its operation on its children whenever it is evaluated.
-	class branch : public detail::default_branch<T, expression_tree::no_caching, EvaluationPolicy>
+	class branch : public detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>
 	{
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::no_caching, EvaluationPolicy>& l, const node<T, expression_tree::no_caching, EvaluationPolicy>& r)
-			: detail::default_branch<T, expression_tree::no_caching, EvaluationPolicy>(f, l, r) {}
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::no_caching, ThreadingPolicy>& l, const node<T, expression_tree::no_caching, ThreadingPolicy>& r)
+			: detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>(f, l, r) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::no_caching, EvaluationPolicy>(o) {}
+		branch(const branch& o) : detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>(o) {}
 
 		virtual ~branch() {}
 	};
 };
 
 //!\brief Implementation of the CachingPolicy used by tree.
-template<typename T, class EvaluationPolicy>
+template<typename T, class ThreadingPolicy>
 struct cache_on_evaluation
 {
 	//!\brief Implementation of a branch class that performs caching on evaluation.
 	//!
 	//! A caching-on-evaluation branch will apply its operation on its children when it is evaluated
 	//! and cache that value if it is constant (e.g. if its children are of constant value).
-	class branch : public detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>
+	class branch : public detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>
 	{
 		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
 		mutable T value;		//!< This node's value, if \c cached is \c true.
 
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>::f;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>::l;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>::r;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>::constant;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::f;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::l;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::r;
+		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::constant;
 
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_evaluation, EvaluationPolicy>& l, const node<T, expression_tree::cache_on_evaluation, EvaluationPolicy>& r)
-			: detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>(f, l, r), cached(false) {}
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_evaluation, ThreadingPolicy>& l, const node<T, expression_tree::cache_on_evaluation, ThreadingPolicy>& r)
+			: detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>(f, l, r), cached(false) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_evaluation, EvaluationPolicy>(o), cached(o.cached), value(o.value) {}
+		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>(o), cached(o.cached), value(o.value) {}
 
 		virtual ~branch() {}
 
@@ -485,7 +485,7 @@ struct cache_on_evaluation
 		{
 			if(cached) return value;
 
-			value = EvaluationPolicy::evaluate(f, l, r);
+			value = ThreadingPolicy::evaluate(f, l, r);
 
 			if(constant())
 			{
@@ -504,30 +504,30 @@ struct cache_on_evaluation
 };
 
 //!\brief Implementation of the CachingPolicy used by tree.
-template<typename T, class EvaluationPolicy>
+template<typename T, class ThreadingPolicy>
 struct cache_on_assignment
 {
 	//!\brief Implementation of a branch class that performs caching on assignment of its children.
 	//!
 	//! When a caching-on-assignment branch' children are assigned to, the branch checks whether its children
 	//! are constant. If they are, it applies its operation on them and caches that value.
-	class branch : public detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>
+	class branch : public detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>
 	{
 		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
 		mutable T value;		//!< This node's value, if \c cached is \c true.
 
-		using detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>::f;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>::l;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>::r;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>::constant;
+		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::f;
+		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::l;
+		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::r;
+		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::constant;
 
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_assignment, EvaluationPolicy>& l, const node<T, expression_tree::cache_on_assignment, EvaluationPolicy>& r)
-			: detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>(f, l, r), cached(false) {}
+		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_assignment, ThreadingPolicy>& l, const node<T, expression_tree::cache_on_assignment, ThreadingPolicy>& r)
+			: detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>(f, l, r), cached(false) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_assignment, EvaluationPolicy>(o), cached(o.cached), value(o.value) {}
+		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>(o), cached(o.cached), value(o.value) {}
 
 		virtual ~branch() {}
 
@@ -536,7 +536,7 @@ struct cache_on_assignment
 		{
 			if(cached) return value;
 
-			return value = EvaluationPolicy::evaluate(f, l, r);
+			return value = ThreadingPolicy::evaluate(f, l, r);
 		}
 		
 		//! When this branch has its children modified, check if they are constant.
@@ -547,7 +547,7 @@ struct cache_on_assignment
 			{
 				// If this node is constant, cache its value now.
 				cached = true;
-				value = EvaluationPolicy::evaluate(f, l, r);
+				value = ThreadingPolicy::evaluate(f, l, r);
 			}
 			else
 			{
@@ -565,14 +565,17 @@ struct cache_on_assignment
 //! - no_caching: no caching optimization is performed.
 //! - cache_on_evaluation: caching of branches' values is performed when they are evaluated.
 //! - cache_on_assignment: caching of branches' values is performed when they are modified.
-template<typename T, template<typename, typename> class CachingPolicy = no_caching, class EvaluationPolicy = sequential>
-class tree : public node<T, CachingPolicy, EvaluationPolicy>
+//!\param ThreadingPolicy Threading policy to use when evaluating a branch's children. Choices are:
+//! - \link expression_tree::sequential sequential\endlink: evaluate children on after the after on a single thread.
+//! - \link expression_tree::parallel parallel\endlink: evaluate children in parallel as hardware permits using \c std::async.
+template<typename T, template<typename, typename> class CachingPolicy = no_caching, class ThreadingPolicy = sequential>
+class tree : public node<T, CachingPolicy, ThreadingPolicy>
 {
 public:
 	virtual ~tree() {}
 
 	//!\brief This tree's root node.
-	node<T, CachingPolicy, EvaluationPolicy>& root()
+	node<T, CachingPolicy, ThreadingPolicy>& root()
 	{
 		return *this;
 	}
@@ -593,7 +596,7 @@ public:
   - \ref caching
    - \ref evaluation
    - \ref assignment
-  - \ref parallel
+  - \ref multithreaded
  - \ref improvements
  - \ref sample
  - \ref license
@@ -622,7 +625,8 @@ This implementation:
  - is contained in a single header file.
  - uses templates heavily.
  - specializes the branches and the leaves to reduce space overhead.
- - is dependent on C++0x's function<> class and, if parallel evaluation is enabled, the \c \<future\> header.
+ - is dependent on C++11's function<> class
+ - can take advantage of multithreading hardware if the \c \<future\> header is available.
  - requires RTTI.
  - has little in the way of safety checks.
  - has been tested with g++ 4.2.1, g++ 4.5.0, VS 2008 and VS2010.
@@ -723,10 +727,14 @@ B<SUB>n-1</SUB> will also be found constant and be evaluated.
 This will continue until entire tree is evaluated.
 Thus, a single assignment can trigger the equivalent of \link expression_tree::tree::evaluate() evaluate() \endlink.
 
-\subsection parallel Parallel evaluation
+\subsection multithreaded Parallel evaluation
 
 This optimization depends on the availability of C++11's \c \<future\> header.
-It is enabled by defining the macro \c EXPRESSION_TREE_ENABLE_PARALLEL_EVALUATION and instantiating a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
+It is enabled by defining the macro \c EXPRESSION_TREE_HAS_FUTURE and instantiating a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
+
+When enabled, a branch will evaluate on of its children on the current thread and its other child on a separate, hardware permitting.
+The decision to actually spawn a seperate thread is left to \c std::async's implementation.
+For large enough tree's the hardware limit will be reached and branches will start evaluating their children sequentially regardless of their threading policy.
 
 The default policy is \link expression_tree::sequential sequential \endlink which evalutes the tree sequentially.
 
@@ -737,8 +745,6 @@ The default policy is \link expression_tree::sequential sequential \endlink whic
 \section sample Sample code
 
 \include examples.cpp
-
-\note If you don't see the sample code, add \c "./" (without quotes) to your Doxyfile's EXAMPLE_PATH. The sample code is linked to \c examples.cpp.
 
 \section license License
 
