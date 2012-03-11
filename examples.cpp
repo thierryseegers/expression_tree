@@ -193,16 +193,20 @@ int main()
     // Demonstration of parallel evaluation.
     //
     // We build two trees with the exact same morphology, one to be evaluated sequentially and another, parallely.
+	// Nodes perform no computation except for sleeping for one second.
+	// Leavs perform no compuation.
     //
-    //              wait 1s
+    //              wait 1s              // Level 1
     //             /       \
-    //      wait 1s         wait 1s
+    //      wait 1s         wait 1s      // Level 2
     //      /     \         /     \  
-    // wait 1s wait 1s wait 1s wait 1s
+    // wait 1s wait 1s wait 1s wait 1s   // Level 3
     //  /   \   /   \   /   \   /   \ 
-    // 0     0 0     0 0     0 0     0
+    // 0     0 0     0 0     0 0     0   // Level 4	(instantaneous evaluation)
     //
     // It should take 7 seconds to evaluate the sequential tree, but less time to evaluate the parallel one.
+	// If one's hardware can execute two threads in parallel, level 3 can be evaluated in two seconds and level 2 in one second.
+	// If one's hardware can execute four threads in parallel, level 3 and level 2 can each be evaluated in one second.
 
     // This branch operation does nothing except sleep for one second.
     auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(1)); return nullptr; };
@@ -211,10 +215,12 @@ int main()
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::sequential> tnncl;
     tnncl.root() = delay;
     tnncl.left() = delay;
-    tnncl.right() = delay;
     tnncl.left().left() = delay;
-    tnncl.left().left().left() = tnncl.left().left().right() = nullptr;
-    tnncl.left().right() = tnncl.right().left() = tnncl.right().right() = tnncl.left().left();
+    tnncl.left().left().left() = nullptr;
+
+	tnncl.left().left().right() = tnncl.left().left().left();
+	tnncl.left().right() = tnncl.left().left();
+	tnncl.right() = tnncl.left();
 
     auto then = chrono::steady_clock::now();
     tnncl.evaluate();
@@ -224,12 +230,14 @@ int main()
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnncp;
     tnncp.root() = delay;
     tnncp.left() = delay;
-    tnncp.right() = delay;
     tnncp.left().left() = delay;
-    tnncp.left().left().left() = tnncp.left().left().right() = nullptr;
-    tnncp.left().right() = tnncp.right().left() = tnncp.right().right() = tnncp.left().left();
+    tnncp.left().left().left() = nullptr;
 
-    then = chrono::steady_clock::now();
+	tnncp.left().left().right() = tnncp.left().left().left();
+	tnncp.left().right() = tnncp.left().left();
+	tnncp.right() = tnncp.left();
+
+	then = chrono::steady_clock::now();
     tnncp.evaluate();
     cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";  // 3 seconds on my computer.
 
