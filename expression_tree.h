@@ -29,19 +29,21 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
-#include <functional>	// Eventually, that's all we'll need for all compilers.
-
-#if defined(EXPRESSION_TREE_HAS_FUTURE)
-#include <future>
-#endif
-
-//!\cond .
-
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+
+
+#include <functional>	// Eventually, that's all we'll need for all compilers.
 
 #if (defined(__GNUG__) && (GCC_VERSION < 40500))
 #include <tr1/functional>	// Needed for g++ up to 4.4.x.
 #endif
+
+#if (defined(__GNUG__) && (GCC_VERSION >= 40500)) || (defined(_MSC_VER) && (_MSC_VER >= 1700))
+#define EXPRESSION_TREE_HAS_FUTURE
+#include <future>
+#endif
+
+//!\cond .
 
 // Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
 #if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
