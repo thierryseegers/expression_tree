@@ -193,8 +193,8 @@ int main()
     // Demonstration of parallel evaluation.
     //
     // We build two trees with the exact same morphology, one to be evaluated sequentially and another, parallely.
-	// Nodes perform no computation except for sleeping for one second.
-	// Leavs perform no compuation.
+    // Nodes perform no computation except for sleeping for one second.
+    // Leavs perform no compuation.
     //
     //              wait 1s              // Level 1
     //             /       \
@@ -205,8 +205,8 @@ int main()
     // 0     0 0     0 0     0 0     0   // Level 4	(instantaneous evaluation)
     //
     // It should take 7 seconds to evaluate the sequential tree, but less time to evaluate the parallel one.
-	// If one's hardware can execute two threads in parallel, level 3 can be evaluated in two seconds and level 2 in one second.
-	// If one's hardware can execute four threads in parallel, level 3 and level 2 can each be evaluated in one second.
+    // If one's hardware can execute two threads in parallel, level 3 can be evaluated in two seconds and level 2 in one second.
+    // If one's hardware can execute four threads in parallel, level 3 and level 2 can each be evaluated in one second.
 
     // This branch operation does nothing except sleep for one second.
     auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(1)); return nullptr; };
