@@ -2,9 +2,12 @@ cmake_minimum_required(VERSION 2.6)
 
 project(expression_tree)
 
-include_directories(${CMAKE_INCLUDE_PATH}) 
+add_subdirectory(examples)
+add_subdirectory(documentation)
 
-link_directories(${CMAKE_LIBRARY_PATH})
+install(FILES ${PROJECT_SOURCE_DIR}/include/expression_tree.h DESTINATION include)
+install(DIRECTORY ${PROJECT_BINARY_DIR}/documentation/html DESTINATION documentation)
 
-add_executable(examples examples.cpp)
- 
+set(CPACK_GENERATOR ZIP)
+set(CPACK_PACKAGE_FILE_NAME expression_tree) 
+include(CPack)

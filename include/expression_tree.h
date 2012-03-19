@@ -29,8 +29,9 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
+//!\cond 
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-
+//!\endcond
 
 #include <functional>	// Eventually, that's all we'll need for all compilers.
 
@@ -43,7 +44,7 @@
 #include <future>
 #endif
 
-//!\cond .
+//!\cond
 
 // Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
 #if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
@@ -749,7 +750,7 @@ The default policy is \link expression_tree::sequential sequential \endlink whic
 
 \section sample Sample code
 
-\include examples.cpp
+\include examples/main.cpp
 
 \section license License
 

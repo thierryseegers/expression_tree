@@ -218,9 +218,9 @@ int main()
     tnncl.left().left() = delay;
     tnncl.left().left().left() = nullptr;
 
-	tnncl.left().left().right() = tnncl.left().left().left();
-	tnncl.left().right() = tnncl.left().left();
-	tnncl.right() = tnncl.left();
+    tnncl.left().left().right() = tnncl.left().left().left();
+    tnncl.left().right() = tnncl.left().left();
+    tnncl.right() = tnncl.left();
 
     auto then = chrono::steady_clock::now();
     tnncl.evaluate();
@@ -233,9 +233,9 @@ int main()
     tnncp.left().left() = delay;
     tnncp.left().left().left() = nullptr;
 
-	tnncp.left().left().right() = tnncp.left().left().left();
-	tnncp.left().right() = tnncp.left().left();
-	tnncp.right() = tnncp.left();
+    tnncp.left().left().right() = tnncp.left().left().left();
+    tnncp.left().right() = tnncp.left().left();
+    tnncp.right() = tnncp.left();
 
 	then = chrono::steady_clock::now();
     tnncp.evaluate();
