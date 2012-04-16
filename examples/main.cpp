@@ -1,12 +1,24 @@
 #include "expression_tree.h"
 
-#if defined(EXPRESSION_TREE_HAS_FUTURE)
-#include <chrono>
-#include <thread>
-#endif
-
 #include <iostream>
 #include <string>
+
+#if defined(EXPRESSION_TREE_HAS_FUTURE) && (defined(_WIN32) || defined(__linux__))
+
+#define TEST_PARALLEL
+
+#include <chrono>
+#include <thread>
+
+#if defined(_WIN32)
+#include <Windows.h>
+#elif defined(__linux__)
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+#endif
 
 using namespace std;
 
@@ -19,6 +31,62 @@ struct functor
         return 2 * l + r;
     }
 };
+
+#if defined(TEST_PARALLEL)
+
+// This function keeps the thread it is run on busy for one second's worth of CPU time.
+// Two implementations are provided, one for Windows, the other for Linux.
+nullptr_t busy_1_sec(const nullptr_t&, const nullptr_t&)
+{
+#if defined(_WIN32)
+
+    FILETIME a, b, kernel_ft, user_ft;
+    GetThreadTimes(GetCurrentThread(), &a, &b, &kernel_ft, &user_ft);
+
+    ULARGE_INTEGER kernel_start, kernel_elapsed, user_start, user_elapsed;
+
+    kernel_start.HighPart = kernel_ft.dwHighDateTime;
+    kernel_start.LowPart = kernel_ft.dwLowDateTime;
+
+    user_start.HighPart = user_ft.dwHighDateTime;
+    user_start.LowPart = user_ft.dwLowDateTime;
+
+    do
+    {
+        short i = 0; while(++i);
+
+        GetThreadTimes(GetCurrentThread(), &a, &b, &kernel_ft, &user_ft);
+
+        kernel_elapsed.HighPart = kernel_ft.dwHighDateTime;
+        kernel_elapsed.LowPart = kernel_ft.dwLowDateTime;
+
+        user_elapsed.HighPart = user_ft.dwHighDateTime;
+        user_elapsed.LowPart = user_ft.dwLowDateTime;
+	}
+	while(((kernel_elapsed.QuadPart + user_elapsed.QuadPart) - (kernel_start.QuadPart + user_start.QuadPart)) < 10000000);
+
+#elif defined(__linux__)
+	rusage r;
+	getrusage(RUSAGE_THREAD, &r);
+
+	double start, elapsed;
+	start = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
+	
+	do
+	{
+		char c = 0; while(++c);
+
+		getrusage(RUSAGE_THREAD, &r);
+
+		elapsed = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
+	}
+	while(elapsed - start < 1.);
+
+#endif
+
+	return nullptr;
+};
+#endif
 
 int main()
 {
@@ -188,19 +256,19 @@ int main()
 
     cout << tice.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
 
-#if defined(EXPRESSION_TREE_HAS_FUTURE)
+#if defined(TEST_PARALLEL)
 
     // Demonstration of parallel evaluation.
     //
     // We build two trees with the exact same morphology, one to be evaluated sequentially and another, parallely.
-    // Nodes perform no computation except for sleeping for one second.
-    // Leavs perform no compuation.
+    // Nodes operation is to stay busy for one second.
+    // Leaves have no value of consequence.
     //
-    //              wait 1s              // Level 1
+    //              busy 1s              // Level 1
     //             /       \
-    //      wait 1s         wait 1s      // Level 2
+    //      busy 1s         busy 1s      // Level 2
     //      /     \         /     \  
-    // wait 1s wait 1s wait 1s wait 1s   // Level 3
+    // busy 1s busy 1s busy 1s busy 1s   // Level 3
     //  /   \   /   \   /   \   /   \ 
     // 0     0 0     0 0     0 0     0   // Level 4	(instantaneous evaluation)
     //
@@ -208,38 +276,35 @@ int main()
     // If one's hardware can execute two threads in parallel, level 3 can be evaluated in two seconds and level 2 in one second.
     // If one's hardware can execute four threads in parallel, level 3 and level 2 can each be evaluated in one second.
 
-    // This branch operation does nothing except sleep for one second.
-    auto delay = [](const nullptr_t&, const nullptr_t&)->nullptr_t{ this_thread::sleep_for(chrono::seconds(1)); return nullptr; };
-
     // The sequential tree.
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::sequential> tnncl;
-    tnncl.root() = delay;
-    tnncl.left() = delay;
-    tnncl.left().left() = delay;
+    tnncl.root() = busy_1_sec;
+    tnncl.left() = busy_1_sec;
+    tnncl.left().left() = busy_1_sec;
     tnncl.left().left().left() = nullptr;
 
     tnncl.left().left().right() = tnncl.left().left().left();
     tnncl.left().right() = tnncl.left().left();
     tnncl.right() = tnncl.left();
 
-    auto then = chrono::steady_clock::now();
+    auto then = chrono::high_resolution_clock::now();
     tnncl.evaluate();
-    cout << "sequential tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";    // 7 seconds.
+    cout << "Sequential tree evaluated in " << chrono::duration<float>(chrono::high_resolution_clock::now() - then).count() << " seconds.\n";    // 7 seconds.
 
     // The parallel tree.
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnncp;
-    tnncp.root() = delay;
-    tnncp.left() = delay;
-    tnncp.left().left() = delay;
+    tnncp.root() = busy_1_sec;
+    tnncp.left() = busy_1_sec;
+    tnncp.left().left() = busy_1_sec;
     tnncp.left().left().left() = nullptr;
 
     tnncp.left().left().right() = tnncp.left().left().left();
     tnncp.left().right() = tnncp.left().left();
     tnncp.right() = tnncp.left();
 
-	then = chrono::steady_clock::now();
+	then = chrono::high_resolution_clock::now();
     tnncp.evaluate();
-    cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::steady_clock::now() - then).count() << " seconds.\n";  // 3 seconds on my computer.
+    cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::high_resolution_clock::now() - then).count() << " seconds.\n";  // 3 seconds on my computer.
 
 #endif
 
