@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 2.6)
 
 project(expression_tree)
 
-set(EXPRESSION_TREE_VERSION_MAJOR 3 CACHE STRING "major version number")
-set(EXPRESSION_TREE_VERSION_MINOR 1 CACHE STRING "minor version number")
+set(EXPRESSION_TREE_VERSION_MAJOR 3)
+set(EXPRESSION_TREE_VERSION_MINOR 2)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
