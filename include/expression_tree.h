@@ -29,7 +29,7 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
-//!\cond 
+//!\cond .
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 //!\endcond
 
@@ -44,7 +44,7 @@
 #include <future>
 #endif
 
-//!\cond
+//!\cond .
 
 // Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
 #if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
@@ -87,9 +87,14 @@ struct parallel
 	template<typename T, template<typename, typename> class C, class E>
 	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
-		future<T> f = std::async(&node<T, C, E>::evaluate, &l);
+		std::future<T> f = std::async(&node<T, C, E>::evaluate, &l);
 
-		return o(f.get(), r.evaluate());
+		// Let's not rely on any assumption of parameter evaluation order...
+		T t = r.evaluate();
+
+		f.wait(); // Workaround GCC bug: http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52988
+
+		return o(f.get(), t);
 	}
 };
 
@@ -273,6 +278,9 @@ public:
 };
 
 }
+
+template<typename T, class ThreadingPolicy>
+struct no_caching;
 
 //!\brief The tree's node class.
 //!
