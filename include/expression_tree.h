@@ -643,7 +643,9 @@ This implementation:
  - can take advantage of multithreading hardware if the \c \<future\> header is available.
  - requires RTTI.
  - has little in the way of safety checks.
- - has been tested with g++ 4.2.1, g++ 4.5.0, VS 2008 and VS2010.
+ - has been tested with GCC 4.2.1, GCC 4.5.0, GCC 4.6.3, VS 2008, VS 2010 and VS 11 Beta.
+  - Note that, as of this writing, GCC up to version 4.7 does not implement std::async <a href="http://gcc.gnu.org/bugzilla/show_bug.cgi?id=51617">as one would expect</a>.
+    Thus, \ref multithreaded "parallel evaluation" will only truly be parallel when the implementation is corrected.
 
 In order to be evaluated, the tree must be correctly formed.
 That is, all its branch nodes' children nodes must have been given a value.
@@ -744,9 +746,10 @@ Thus, a single assignment can trigger the equivalent of \link expression_tree::t
 \subsection multithreaded Parallel evaluation
 
 This optimization depends on the availability of C++11's \c \<future\> header.
-It is enabled by defining the macro \c EXPRESSION_TREE_HAS_FUTURE and instantiating a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
+It is enabled automatically if your toolchain supports it.
+To benefit from parallel evaluation, a tree must be instantiated a \link expression_tree::tree tree \endlink with the \link expression_tree::parallel parallel \endlink policy class.
 
-When enabled, a branch will evaluate on of its children on the current thread and its other child on a separate, hardware permitting.
+When enabled, a branch will evaluate one of its children on the current thread and its other child on a separate, hardware permitting.
 The decision to actually spawn a seperate thread is left to \c std::async's implementation.
 For large enough tree's the hardware limit will be reached and branches will start evaluating their children sequentially regardless of their threading policy.
 
