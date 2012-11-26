@@ -29,31 +29,8 @@
 #if !defined(EXPRESSION_TREE_H)
      #define EXPRESSION_TREE_H
 
-//!\cond .
-#define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-//!\endcond
-
-#include <functional>	// Eventually, that's all we'll need for all compilers.
-
-#if (defined(__GNUG__) && (GCC_VERSION < 40500))
-#include <tr1/functional>	// Needed for g++ up to 4.4.x.
-#endif
-
-#if (defined(__GNUG__) && (GCC_VERSION >= 40500)) || (defined(_MSC_VER) && (_MSC_VER >= 1700))
-#define EXPRESSION_TREE_HAS_FUTURE
+#include <functional>
 #include <future>
-#endif
-
-//!\cond .
-
-// Here we define a tr1_ macro that will map to the right namespace depending on the compiler.
-#if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
-#define tr1_ std::tr1	// For g++ up to 4.4.x or for VS 2008, the function class is in the std::tr1 namespace.
-#else
-#define tr1_ std		// For g++ 4.5.x and VS 2010, the function class is in the std namespace.
-#endif
-
-//!\endcond
 
 namespace expression_tree
 {
@@ -70,17 +47,12 @@ namespace detail
 template<typename T>
 struct operation
 {
-	typedef typename tr1_::function<T (const T&, const T&)> t;	//!< Template typedef trick.
+	typedef typename std::function<T (const T&, const T&)> t;	//!< Template typedef trick.
 };
 
 }
 
-#if defined(EXPRESSION_TREE_HAS_FUTURE)
-
 //!\brief Performs parallel evaluation of a branch's children before applying its operation.
-//!
-//! This policy is available when \c EXPRESSION_TREE_HAS_FUTURE is defined.
-//! It is dependent on the \c \<future\> header.
 struct parallel
 {
 	//!\brief Spawns a parallel evaluation task for the left child and evaluates the right child on the current thread.
@@ -97,8 +69,6 @@ struct parallel
 		return o(f.get(), t);
 	}
 };
-
-#endif
 
 //!\brief Performs sequential evaluation of a branch's children before applying its operation.
 struct sequential
@@ -232,10 +202,10 @@ public:
 	//!\param f The operation to apply to this branch's children,
 	//!\param l This branch's left child.
 	//!\param r This branch's right child.
-	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy, ThreadingPolicy>& l, const node<T, CachingPolicy, ThreadingPolicy>& r) : f(f), l(l), r(r) {}
+	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy, ThreadingPolicy>& l, const node<T, CachingPolicy, ThreadingPolicy>& r) : l(l), r(r), f(f) {}
 
 	//!\brief Copy constructor.
-	default_branch(const default_branch<T, CachingPolicy, ThreadingPolicy>& other) : f(other.f), l(other.l), r(other.r) {}
+	default_branch(const default_branch<T, CachingPolicy, ThreadingPolicy>& other) : l(other.l), r(other.r) , f(other.f) {}
 	
 	virtual ~default_branch() {}
 

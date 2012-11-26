@@ -1,13 +1,9 @@
 #include "expression_tree.h"
 
+#include <cassert>
+#include <chrono>
 #include <iostream>
 #include <string>
-
-#if defined(EXPRESSION_TREE_HAS_FUTURE) && (defined(_WIN32) || defined(__linux__))
-
-#define TEST_PARALLEL
-
-#include <chrono>
 #include <thread>
 
 #if defined(_WIN32)
@@ -16,23 +12,13 @@
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <unistd.h>
-#endif
-
+#elif defined(__APPLE__)
+#include <mach/mach_init.h>
+#include <mach/task.h>
+#include <mach/task_info.h>
 #endif
 
 using namespace std;
-
-// We'll use this if we think the compiler doesn't support lambdas.
-template<typename T>
-struct functor
-{
-    T operator()(const T& l, const T& r)
-    {
-        return 2 * l + r;
-    }
-};
-
-#if defined(TEST_PARALLEL)
 
 // This function keeps the thread it is run on busy for one second's worth of CPU time.
 // Two implementations are provided, one for Windows, the other for Linux.
@@ -62,31 +48,47 @@ nullptr_t busy_1_sec(const nullptr_t&, const nullptr_t&)
 
         user_elapsed.HighPart = user_ft.dwHighDateTime;
         user_elapsed.LowPart = user_ft.dwLowDateTime;
-	}
-	while(((kernel_elapsed.QuadPart + user_elapsed.QuadPart) - (kernel_start.QuadPart + user_start.QuadPart)) < 10000000);
+    }
+    while(((kernel_elapsed.QuadPart + user_elapsed.QuadPart) - (kernel_start.QuadPart + user_start.QuadPart)) < 10000000);
 
 #elif defined(__linux__)
-	rusage r;
-	getrusage(RUSAGE_THREAD, &r);
+    rusage r;
+    getrusage(RUSAGE_THREAD, &r);
 
-	double start, elapsed;
-	start = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
-	
-	do
-	{
-		char c = 0; while(++c);
+    double start, elapsed;
+    start = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
+    
+    do
+    {
+        char c = 0; while(++c);
 
-		getrusage(RUSAGE_THREAD, &r);
+        getrusage(RUSAGE_THREAD, &r);
 
-		elapsed = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
-	}
-	while(elapsed - start < 1.);
-
+        elapsed = r.ru_utime.tv_sec + r.ru_stime.tv_sec + ((r.ru_utime.tv_usec + r.ru_stime.tv_usec) / 1000000.);
+    }
+    while(elapsed - start < 1.);
+    
+#elif defined(__APPLE__)
+    task_thread_times_info info;
+    mach_msg_type_number_t number = TASK_THREAD_TIMES_INFO_COUNT;
+    task_info(mach_task_self(), TASK_THREAD_TIMES_INFO, (task_info_t)&info, &number);
+    
+    double start, elapsed;
+    start = info.user_time.seconds + info.system_time.seconds + ((info.user_time.microseconds + info.system_time.microseconds) * 1e-6);
+    
+    do
+    {
+        char c = 0; while(++c);
+        
+        task_info(mach_task_self(), TASK_THREAD_TIMES_INFO, (task_info_t)&info, &number);
+        
+        elapsed = info.user_time.seconds + info.system_time.seconds + ((info.user_time.microseconds + info.system_time.microseconds) * 1e-6);
+    }while(elapsed - start < 1.);
+    
 #endif
 
-	return nullptr;
+    return nullptr;
 };
-#endif
 
 int main()
 {
@@ -110,13 +112,7 @@ int main()
     //          /   \
     //        2      3
 
-    // For Visual Studio 2010 or g++ 4.5.x and above, we'll assign a lambda to the root node.
-    // For other compilers, we'll assign the functor defined above.
-#if (defined(__GNUG__) && (GCC_VERSION < 40500)) || (defined(_MSC_VER) && (_MSC_VER < 1600))
-    tinc.root() = functor<int>();
-#else
     tinc.root() = [](int i, int j){ return 2 * i + j; };
-#endif
 
     tinc.root().left() = 1;
     tinc.root().right() = minus<int>();
@@ -256,8 +252,6 @@ int main()
 
     cout << tice.evaluate() << endl; // Prints "8" ((y + 2) + (y + 2)).
 
-#if defined(TEST_PARALLEL)
-
     // Demonstration of parallel evaluation.
     //
     // We build two trees with the exact same morphology, one to be evaluated sequentially and another, parallely.
@@ -278,9 +272,9 @@ int main()
 
     // The sequential tree.
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::sequential> tnncl;
-    tnncl.root() = busy_1_sec;
-    tnncl.left() = busy_1_sec;
-    tnncl.left().left() = busy_1_sec;
+    tnncl.root() = &busy_1_sec;
+    tnncl.left() = &busy_1_sec;
+    tnncl.left().left() = &busy_1_sec;
     tnncl.left().left().left() = nullptr;
 
     tnncl.left().left().right() = tnncl.left().left().left();
@@ -293,21 +287,18 @@ int main()
 
     // The parallel tree.
     expression_tree::tree<nullptr_t, expression_tree::no_caching, expression_tree::parallel> tnncp;
-    tnncp.root() = busy_1_sec;
-    tnncp.left() = busy_1_sec;
-    tnncp.left().left() = busy_1_sec;
+    tnncp.root() = &busy_1_sec;
+    tnncp.left() = &busy_1_sec;
+    tnncp.left().left() = &busy_1_sec;
     tnncp.left().left().left() = nullptr;
 
     tnncp.left().left().right() = tnncp.left().left().left();
     tnncp.left().right() = tnncp.left().left();
     tnncp.right() = tnncp.left();
 
-	then = chrono::high_resolution_clock::now();
+    then = chrono::high_resolution_clock::now();
     tnncp.evaluate();
     cout << "Parallel tree evaluated in " << chrono::duration<float>(chrono::high_resolution_clock::now() - then).count() << " seconds.\n";  // 3 seconds on my computer.
-
-#endif
-
 
     // Misues.
 
