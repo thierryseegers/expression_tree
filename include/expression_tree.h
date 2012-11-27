@@ -31,6 +31,7 @@
 
 #include <functional>
 #include <future>
+#include <memory>
 
 namespace expression_tree
 {
@@ -94,7 +95,7 @@ public:
 	//!\brief Clones this object.
 	//!
 	//! Necessary for assignment operator of classes that will own concrete instances of this base class.
-	virtual node_impl<T>* clone() const = 0;
+	virtual std::unique_ptr<node_impl<T>> clone() const = 0;
 
 	//!\brief Constness of the node.
 	//!
@@ -129,9 +130,9 @@ public:
 	virtual ~leaf() {}
 
 	//!\brief Clones this object.
-	virtual leaf<T>* clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const
 	{
-		return new leaf<T>(*this);
+		return std::unique_ptr<leaf<T>>(new leaf<T>(*this));
 	}
 
 	//! Because this classes stores a copy of its data, it is constant.
@@ -167,9 +168,9 @@ public:
 	virtual ~leaf() {}
 
 	//!\brief Clones this object.
-	virtual leaf<T*>* clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const
 	{
-		return new leaf<T*>(*this);
+		return std::unique_ptr<leaf<T*>>(new leaf<T*>(*this));
 	}
 
 	//! Because this class stores a pointer to its data, it is not constant.
@@ -210,9 +211,9 @@ public:
 	virtual ~default_branch() {}
 
 	//!\brief Clones this object.
-	virtual default_branch<T, CachingPolicy, ThreadingPolicy>* clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const
 	{
-		return new default_branch<T, CachingPolicy, ThreadingPolicy>(*this);
+		return std::unique_ptr<default_branch<T, CachingPolicy, ThreadingPolicy>>(new default_branch<T, CachingPolicy, ThreadingPolicy>(*this));
 	}
 
 	//! The constness of a branch is determined by the constness of its children.
@@ -259,31 +260,24 @@ struct no_caching;
 template<typename T, template<typename, typename> class CachingPolicy = no_caching, class ThreadingPolicy = sequential>
 class node
 {
-	detail::node_impl<T> *impl;		//!< Follows the pimpl idiom.
+	std::unique_ptr<detail::node_impl<T>> impl;		//!< Follows the pimpl idiom.
 	node<T, CachingPolicy, ThreadingPolicy> *parent; //!< This node's parent. Ends up unused when no caching occurs.
 
 public:
 	//!\brief Default constructor.
 	//!
 	//!\param parent Pointer to this node's parent.
-	node(node<T, CachingPolicy, ThreadingPolicy> *parent = 0) : impl(0), parent(parent) {}
+	node(node<T, CachingPolicy, ThreadingPolicy> *parent = 0) : impl(nullptr), parent(parent) {}
 
 	//!\brief Copy constructor.
-	node(const node<T, CachingPolicy, ThreadingPolicy>& other) : impl(other.impl ? other.impl->clone() : 0), parent(other.parent) {}
+	node(const node<T, CachingPolicy, ThreadingPolicy>& other) : impl(other.impl ? other.impl->clone() : nullptr), parent(other.parent) {}
 
 	//!\brief Assignment operator.
 	node<T, CachingPolicy, ThreadingPolicy>& operator=(const node<T, CachingPolicy, ThreadingPolicy>& other)
 	{
 		if(this != &other)
 		{
-			detail::node_impl<T>* c = other.impl->clone();
-
-			if(impl)
-			{
-				delete impl;
-			}
-
-			impl = c;
+			impl = other.impl->clone();
 			parent = other.parent;
 
 			if(parent)
@@ -296,12 +290,7 @@ public:
 	}
 
 	virtual ~node()
-	{
-		if(impl)
-		{
-			delete impl;
-		}
-	}
+	{}
 
 	//!\brief Assign a value to this node.
 	//!
@@ -309,12 +298,7 @@ public:
 	//! A leaf can still be changed to a branch by assigning an operation to it.
 	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T& t)
 	{
-		if(impl)
-		{
-			delete impl;
-		}
-
-		impl = new detail::leaf<T>(t);
+		impl.reset(new detail::leaf<T>(t));
 
 		if(parent)
 		{
@@ -330,12 +314,7 @@ public:
 	//! A leaf can still be changed to a branch by assigning an operation to it.
 	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T* t)
 	{
-		if(impl)
-		{
-			delete impl;
-		}
-
-		impl = new detail::leaf<T*>(t);
+		impl.reset(new detail::leaf<T*>(t));
 
 		if(parent)
 		{
@@ -351,13 +330,8 @@ public:
 	//! A branch can still be changed to a leaf by assigning data to it.
 	node<T, CachingPolicy, ThreadingPolicy>& operator=(const typename detail::operation<T>::t& f)
 	{
-		if(impl)
-		{
-			delete impl;
-		}
-
 		// Create a new branch with the passed operation and two nodes with this node as their parent.
-		impl = new typename CachingPolicy<T, ThreadingPolicy>::branch(f, node<T, CachingPolicy, ThreadingPolicy>(this), node<T, CachingPolicy, ThreadingPolicy>(this));
+		impl.reset(new typename CachingPolicy<T, ThreadingPolicy>::branch(f, node<T, CachingPolicy, ThreadingPolicy>(this), node<T, CachingPolicy, ThreadingPolicy>(this)));
 
 		if(parent)
 		{
@@ -372,7 +346,7 @@ public:
 	//! Note that if this node is a leaf node, behavior is undefined.
 	node<T, CachingPolicy, ThreadingPolicy>& left()
 	{
-		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->left();
+		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->left();
 	}
 
 	//!\brief This node's right child.
@@ -380,7 +354,7 @@ public:
 	//! Note that if this node is a leaf node, behavior is undefined.
 	node<T, CachingPolicy, ThreadingPolicy>& right()
 	{
-		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->right();
+		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->right();
 	}
 
 	//!\brief Constness of this node.
@@ -400,7 +374,7 @@ public:
 	//! Recursively notifies parent nodes of the growth that happened.
 	void grow()
 	{
-		dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl)->grow();
+		dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->grow();
 
 		if(parent)
 		{
