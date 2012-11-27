@@ -12,8 +12,12 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
 	set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
 endif()
 
-add_subdirectory(examples)
+enable_testing()
+
 add_subdirectory(documentation)
+add_subdirectory(examples)
+add_subdirectory(include)
+add_subdirectory(tests)
 
 install(FILES ${PROJECT_SOURCE_DIR}/include/expression_tree.h DESTINATION include)
 install(DIRECTORY ${PROJECT_BINARY_DIR}/documentation/htdocs DESTINATION documentation)

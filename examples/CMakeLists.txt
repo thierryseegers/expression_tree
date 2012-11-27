@@ -6,7 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 	set(CMAKE_CXX_FLAGS -std=c++0x)
 endif()
 
-add_executable(examples main.cpp ${PROJECT_SOURCE_DIR}/include/expression_tree.h)
+add_executable(examples main.cpp)
 
 if(CMAKE_COMPILER_IS_GNUCXX)
 	target_link_libraries(examples pthread rt)
