@@ -548,16 +548,7 @@ public:
 
 \mainpage expression_tree
 
- - \ref introduction
- - \ref considerations
- - \ref optimizations
-  - \ref caching
-   - \ref evaluation
-   - \ref assignment
-  - \ref multithreaded
- - \ref improvements
- - \ref sample
- - \ref license
+\tableofcontents
 
 \section introduction Introduction
 
