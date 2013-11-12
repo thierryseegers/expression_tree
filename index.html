@@ -77,23 +77,23 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
 <div class="title">expression_tree </div>  </div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><ul>
-<li><a class="el" href="index.html#introduction">Introduction</a></li>
-<li><a class="el" href="index.html#considerations">Technical considerations</a></li>
-<li><a class="el" href="index.html#optimizations">Optimizations</a><ul>
-<li><a class="el" href="index.html#caching">Branch caching</a><ul>
-<li><a class="el" href="index.html#evaluation">Caching-on-evaluation optimization</a></li>
-<li><a class="el" href="index.html#assignment">Caching-on-assignment optimization</a></li>
+<div class="toc"><h3>Table of Contents</h3>
+<ul><li class="level1"><a href="#introduction">Introduction</a></li>
+<li class="level1"><a href="#considerations">Technical considerations</a></li>
+<li class="level1"><a href="#optimizations">Optimizations</a><ul><li class="level2"><a href="#caching">Branch caching</a><ul><li class="level3"><a href="#evaluation">Caching-on-evaluation optimization</a></li>
+<li class="level3"><a href="#assignment">Caching-on-assignment optimization</a></li>
+<li class="level3"><a href="#degenerate">Degenerate case of caching-on-assignment optimization</a></li>
 </ul>
 </li>
-<li><a class="el" href="index.html#multithreaded">Parallel evaluation</a></li>
+<li class="level2"><a href="#multithreaded">Parallel evaluation</a></li>
 </ul>
 </li>
-<li><a class="el" href="index.html#improvements">Future improvements</a></li>
-<li><a class="el" href="index.html#sample">Sample code</a></li>
-<li><a class="el" href="index.html#license">License</a></li>
+<li class="level1"><a href="#improvements">Future improvements</a></li>
+<li class="level1"><a href="#sample">Sample code</a></li>
+<li class="level1"><a href="#license">License</a></li>
 </ul>
-<h1><a class="anchor" id="introduction"></a>
+</div>
+<div class="textblock"><h1><a class="anchor" id="introduction"></a>
 Introduction</h1>
 <p>An expression tree is a tree that stores data in its leaf nodes and operations in its branch nodes. The tree's value can then be obtained by performing a postorder traversal, applying each branch's operation to its children.</p>
 <p>For example, this tree evaluates to (2 * 1 + (2 - <em>x</em>)):</p>
@@ -523,7 +523,7 @@ DEALINGS IN THE SOFTWARE.
 </pre> </div></div><!-- contents -->
 <!-- start footer part -->
 <hr class="footer"/><address class="footer"><small>
-Generated on Mon Nov 11 2013 15:26:13 for expression_tree by &#160;<a href="http://www.doxygen.org/index.html">
+Generated on Tue Nov 12 2013 15:44:37 for expression_tree by &#160;<a href="http://www.doxygen.org/index.html">
 <img class="footer" src="doxygen.png" alt="doxygen"/>
 </a> 1.8.2
 </small></address>
