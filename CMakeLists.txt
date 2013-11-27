@@ -22,6 +22,7 @@ add_subdirectory(tests)
 install(FILES ${PROJECT_SOURCE_DIR}/include/expression_tree.h DESTINATION include)
 install(DIRECTORY ${PROJECT_BINARY_DIR}/documentation/htdocs DESTINATION documentation)
 
-set(CPACK_GENERATOR ZIP)
+set(CPACK_GENERATOR "ZIP;TGZ")
+set(CPACK_OUTPUT_FILE_PREFIX packages)
 set(CPACK_PACKAGE_FILE_NAME expression_tree_${EXPRESSION_TREE_VERSION_MAJOR}_${EXPRESSION_TREE_VERSION_MINOR}) 
 include(CPack)
