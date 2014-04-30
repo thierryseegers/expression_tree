@@ -46,10 +46,7 @@ namespace detail
 //!
 //! Operations must take two Ts as arguments and return a T.
 template<typename T>
-struct operation
-{
-	typedef typename std::function<T (const T&, const T&)> t;	//!< Template typedef trick.
-};
+using operation = std::function<T (const T&, const T&)>;
 
 }
 
@@ -58,7 +55,7 @@ struct parallel
 {
 	//!\brief Spawns a parallel evaluation task for the left child and evaluates the right child on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
-	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
+	static T evaluate(const detail::operation<T>& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
 		std::future<T> f = std::async(&node<T, C, E>::evaluate, &l);
 
@@ -76,7 +73,7 @@ struct sequential
 {
 	//!\brief Evaluates the right child and then the left child on the current thread.
 	template<typename T, template<typename, typename> class C, class E>
-	static T evaluate(const typename detail::operation<T>::t& o, const node<T, C, E>& l, const node<T, C, E>& r)
+	static T evaluate(const detail::operation<T>& o, const node<T, C, E>& l, const node<T, C, E>& r)
 	{
 		return o(l.evaluate(), r.evaluate());
 	}
@@ -194,26 +191,29 @@ template<typename T, template<typename, typename> class CachingPolicy, class Thr
 class default_branch : public node_impl<T>
 {
 public:
-	node<T, CachingPolicy, ThreadingPolicy> l;	//!< This branch's left child.
-	node<T, CachingPolicy, ThreadingPolicy> r;	//!< This branch's right child.
-	typename operation<T>::t f;	//!< Operation to be applied to this node's children.
+	using node_t = node<T, CachingPolicy, ThreadingPolicy>;	//!< Convenience alias.
+	using default_branch_t = default_branch<T, CachingPolicy, ThreadingPolicy>;	//!< Convenience alias.
+	
+	node_t l;	//!< This branch's left child.
+	node_t r;	//!< This branch's right child.
+	operation<T> f;	//!< Operation to be applied to this node's children.
 	
 	//!\brief Constructor.
 	//!
 	//!\param f The operation to apply to this branch's children,
 	//!\param l This branch's left child.
 	//!\param r This branch's right child.
-	default_branch(const typename operation<T>::t& f, const node<T, CachingPolicy, ThreadingPolicy>& l, const node<T, CachingPolicy, ThreadingPolicy>& r) : l(l), r(r), f(f) {}
+	default_branch(const operation<T>& f, const node_t& l, const node_t& r) : l(l), r(r), f(f) {}
 
 	//!\brief Copy constructor.
-	default_branch(const default_branch<T, CachingPolicy, ThreadingPolicy>& other) : l(other.l), r(other.r) , f(other.f) {}
+	default_branch(const default_branch_t& other) : l(other.l), r(other.r) , f(other.f) {}
 	
 	virtual ~default_branch() {}
 
 	//!\brief Clones this object.
 	virtual std::unique_ptr<node_impl<T>> clone() const
 	{
-		return std::unique_ptr<default_branch<T, CachingPolicy, ThreadingPolicy>>(new default_branch<T, CachingPolicy, ThreadingPolicy>(*this));
+		return std::make_unique<default_branch_t>(*this);
 	}
 
 	//! The constness of a branch is determined by the constness of its children.
@@ -229,13 +229,13 @@ public:
 	}
 
 	//!\brief This branch's left child.
-	virtual node<T, CachingPolicy, ThreadingPolicy>& left()
+	virtual node_t& left()
 	{
 		return l;
 	}
 
 	//!\brief This branch's right child.
-	virtual node<T, CachingPolicy, ThreadingPolicy>& right()
+	virtual node_t& right()
 	{
 		return r;
 	}
@@ -260,20 +260,22 @@ struct no_caching;
 template<typename T, template<typename, typename> class CachingPolicy = no_caching, class ThreadingPolicy = sequential>
 class node
 {
+	using node_t = node<T, CachingPolicy, ThreadingPolicy>;						//!< Convenience alias.
+
 	std::unique_ptr<detail::node_impl<T>> impl;		//!< Follows the pimpl idiom.
-	node<T, CachingPolicy, ThreadingPolicy> *parent; //!< This node's parent. Ends up unused when no caching occurs.
+	node_t *parent; //!< This node's parent. Ends up unused when no caching occurs.
 
 public:
 	//!\brief Default constructor.
 	//!
 	//!\param parent Pointer to this node's parent.
-	node(node<T, CachingPolicy, ThreadingPolicy> *parent = 0) : impl(nullptr), parent(parent) {}
+	node(node_t *parent = nullptr) : impl(nullptr), parent(parent) {}
 
 	//!\brief Copy constructor.
-	node(const node<T, CachingPolicy, ThreadingPolicy>& other) : impl(other.impl ? other.impl->clone() : nullptr), parent(other.parent) {}
+	node(const node_t& other) : impl(other.impl ? other.impl->clone() : nullptr), parent(other.parent) {}
 
 	//!\brief Assignment operator.
-	node<T, CachingPolicy, ThreadingPolicy>& operator=(const node<T, CachingPolicy, ThreadingPolicy>& other)
+	node_t& operator=(const node_t& other)
 	{
 		if(this != &other)
 		{
@@ -296,7 +298,7 @@ public:
 	//!
 	//! The assignment of a \c T designates this node as a leaf node.
 	//! A leaf can still be changed to a branch by assigning an operation to it.
-	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T& t)
+	node_t& operator=(const T& t)
 	{
 		impl.reset(new detail::leaf<T>(t));
 
@@ -312,7 +314,7 @@ public:
 	//!
 	//! The assignment of a \c T* designates this node as a leaf node.
 	//! A leaf can still be changed to a branch by assigning an operation to it.
-	node<T, CachingPolicy, ThreadingPolicy>& operator=(const T* t)
+	node_t& operator=(const T* t)
 	{
 		impl.reset(new detail::leaf<T*>(t));
 
@@ -328,7 +330,7 @@ public:
 	//!
 	//! The assignment of an operation designates this node as a branch.
 	//! A branch can still be changed to a leaf by assigning data to it.
-	node<T, CachingPolicy, ThreadingPolicy>& operator=(const typename detail::operation<T>::t& f)
+	node_t& operator=(const detail::operation<T>& f)
 	{
 		// Create a new branch with the passed operation and two nodes with this node as their parent.
 		impl.reset(new typename CachingPolicy<T, ThreadingPolicy>::branch(f, node<T, CachingPolicy, ThreadingPolicy>(this), node<T, CachingPolicy, ThreadingPolicy>(this)));
@@ -344,7 +346,7 @@ public:
 	//!\brief This node's left child.
 	//!
 	//! Note that if this node is a leaf node, behavior is undefined.
-	node<T, CachingPolicy, ThreadingPolicy>& left()
+	node_t& left()
 	{
 		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->left();
 	}
@@ -352,7 +354,7 @@ public:
 	//!\brief This node's right child.
 	//!
 	//! Note that if this node is a leaf node, behavior is undefined.
-	node<T, CachingPolicy, ThreadingPolicy>& right()
+	node_t& right()
 	{
 		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->right();
 	}
@@ -387,19 +389,21 @@ public:
 template<typename T, class ThreadingPolicy>
 struct no_caching
 {
+	using node_t = node<T, expression_tree::no_caching, ThreadingPolicy>;	//!< Convenience alias.
+	using default_branch_t = detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>;	//!< Convenience alias.
+	
 	//!\brief Implementation of a branch class that performs no caching.
 	//!
 	//! This class performs no optimization.
 	//! A non-caching branch will apply its operation on its children whenever it is evaluated.
-	class branch : public detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>
+	class branch : public default_branch_t
 	{
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::no_caching, ThreadingPolicy>& l, const node<T, expression_tree::no_caching, ThreadingPolicy>& r)
-			: detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>(f, l, r) {}
+		branch(const detail::operation<T>& f, const node_t& l, const node_t& r) : default_branch_t(f, l, r) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::no_caching, ThreadingPolicy>(o) {}
+		branch(const branch& o) : default_branch_t(o) {}
 
 		virtual ~branch() {}
 	};
@@ -409,27 +413,29 @@ struct no_caching
 template<typename T, class ThreadingPolicy>
 struct cache_on_evaluation
 {
+	using node_t = node<T, expression_tree::cache_on_evaluation, ThreadingPolicy>; //!< Convenience alias.
+	using default_branch_t = detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>;	//!< Convenience alias.
+
 	//!\brief Implementation of a branch class that performs caching on evaluation.
 	//!
 	//! A caching-on-evaluation branch will apply its operation on its children when it is evaluated
 	//! and cache that value if it is constant (e.g. if its children are of constant value).
-	class branch : public detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>
+	class branch : public default_branch_t
 	{
 		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
 		mutable T value;		//!< This node's value, if \c cached is \c true.
 
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::f;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::l;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::r;
-		using detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>::constant;
+		using default_branch_t::f;
+		using default_branch_t::l;
+		using default_branch_t::r;
+		using default_branch_t::constant;
 
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_evaluation, ThreadingPolicy>& l, const node<T, expression_tree::cache_on_evaluation, ThreadingPolicy>& r)
-			: detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>(f, l, r), cached(false) {}
+		branch(const detail::operation<T>& f, const node_t& l, const node_t& r) : default_branch_t(f, l, r), cached(false) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_evaluation, ThreadingPolicy>(o), cached(o.cached), value(o.value) {}
+		branch(const branch& o) : default_branch_t(o), cached(o.cached), value(o.value) {}
 
 		virtual ~branch() {}
 
@@ -462,27 +468,29 @@ struct cache_on_evaluation
 template<typename T, class ThreadingPolicy>
 struct cache_on_assignment
 {
+	using node_t = node<T, expression_tree::cache_on_assignment, ThreadingPolicy>; //!< Convenience alias.
+	using default_branch_t = detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>;	//!< Convenience alias.
+
 	//!\brief Implementation of a branch class that performs caching on assignment of its children.
 	//!
 	//! When a caching-on-assignment branch' children are assigned to, the branch checks whether its children
 	//! are constant. If they are, it applies its operation on them and caches that value.
-	class branch : public detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>
+	class branch : public default_branch_t
 	{
 		mutable bool cached;	//!< Whether the value of this node can be considered as cached.
 		mutable T value;		//!< This node's value, if \c cached is \c true.
 
-		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::f;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::l;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::r;
-		using detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>::constant;
+		using default_branch_t::f;
+		using default_branch_t::l;
+		using default_branch_t::r;
+		using default_branch_t::constant;
 
 	public:
 		//!\brief Default constructor.
-		branch(const typename detail::operation<T>::t& f, const node<T, expression_tree::cache_on_assignment, ThreadingPolicy>& l, const node<T, expression_tree::cache_on_assignment, ThreadingPolicy>& r)
-			: detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>(f, l, r), cached(false) {}
+		branch(const detail::operation<T>& f, const node_t& l, const node_t& r) : default_branch_t(f, l, r), cached(false) {}
 
 		//!\brief Copy constructor.
-		branch(const branch& o) : detail::default_branch<T, expression_tree::cache_on_assignment, ThreadingPolicy>(o), cached(o.cached), value(o.value) {}
+		branch(const branch& o) : default_branch_t(o), cached(o.cached), value(o.value) {}
 
 		virtual ~branch() {}
 
