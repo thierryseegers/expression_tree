@@ -125,19 +125,19 @@ public:
 	virtual ~leaf() {}
 
 	//!\brief Clones this object.
-	virtual std::unique_ptr<node_impl<T>> clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
 		return std::unique_ptr<leaf<T>>(new leaf<T>(*this));
 	}
 
 	//! Because this classes stores a copy of its data, it is constant.
-	virtual bool constant() const
+	virtual bool constant() const override
 	{
 		return true;
 	}
 
 	//! Plainly return our value.
-	virtual T evaluate() const
+	virtual T evaluate() const override
 	{
 		return value;
 	}
@@ -163,19 +163,19 @@ public:
 	virtual ~leaf() {}
 
 	//!\brief Clones this object.
-	virtual std::unique_ptr<node_impl<T>> clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
 		return std::unique_ptr<leaf<T*>>(new leaf<T*>(*this));
 	}
 
 	//! Because this class stores a pointer to its data, it is not constant.
-	virtual bool constant() const
+	virtual bool constant() const override
 	{
 		return false;
 	}
 
 	//! Dereference our pointer.
-	virtual T evaluate() const
+	virtual T evaluate() const override
 	{
 		return *p;
 	}
@@ -201,19 +201,19 @@ public:
 	virtual ~leaf() {}
 	
 	//!\brief Clones this object.
-	virtual std::unique_ptr<node_impl<T>> clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
 		return std::make_unique<leaf<T (*)()>>(*this);
 	}
 	
 	//! Because this class stores a pointer to its data, it is not constant.
-	virtual bool constant() const
+	virtual bool constant() const override
 	{
 		return false;
 	}
 	
 	//! Dereference our pointer.
-	virtual T evaluate() const
+	virtual T evaluate() const override
 	{
 		return f();
 	}
@@ -247,19 +247,19 @@ public:
 	virtual ~default_branch() {}
 
 	//!\brief Clones this object.
-	virtual std::unique_ptr<node_impl<T>> clone() const
+	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
 		return std::make_unique<default_branch_t>(*this);
 	}
 
 	//! The constness of a branch is determined by the constness of its children.
-	virtual bool constant() const
+	virtual bool constant() const override
 	{
 		return l.constant() && r.constant();
 	}
 
 	//! Evaluating a branch applies its operation on its children.
-	virtual T evaluate() const
+	virtual T evaluate() const override
 	{
 		return ThreadingPolicy::evaluate(f, l, r);
 	}
@@ -522,7 +522,7 @@ struct cache_on_evaluation
 		//! If the value of this branch has been cached already, return it.
 		//! Otherwise, evaluate it and determine if this branch is constant.
 		//! If it is, considered the value as cached to re-use later.
-		virtual T evaluate() const
+		virtual T evaluate() const override
 		{
 			if(cached) return value;
 
@@ -537,7 +537,7 @@ struct cache_on_evaluation
 		}
 
 		//! When this branch grows (e.g. has its children modified), forget that the value was cached.
-		virtual void grow()
+		virtual void grow() override
 		{
 			cached = false;
 		}
@@ -575,7 +575,7 @@ struct cache_on_assignment
 		virtual ~branch() {}
 
 		//! If the value of this branch has been cached already, return it.
-		virtual T evaluate() const
+		virtual T evaluate() const override
 		{
 			if(cached) return value;
 
@@ -584,7 +584,7 @@ struct cache_on_assignment
 		
 		//! When this branch has its children modified, check if they are constant.
 		//! If they are, perform the operation and cache the value.
-		virtual void grow()
+		virtual void grow() override
 		{
 			if(constant())
 			{
@@ -659,19 +659,16 @@ When your tree is built, call its \link expression_tree::tree::evaluate evaluate
 \section considerations Technical considerations
 
 This implementation:
+ - requires a C++14 comliant compiler and standard library.
  - is contained in a single header file.
  - uses templates heavily.
  - specializes the branches and the leaves to reduce space overhead.
- - is dependent on C++11's function<> class
- - can take advantage of multithreading hardware if the \c \<future\> header is available.
  - requires RTTI.
  - has little in the way of safety checks.
- - has been tested with GCC 4.2.1, GCC 4.5.0, GCC 4.6.3, VS 2008, VS 2010 and VS 11 Beta.
-  - Note that, as of this writing, GCC up to version 4.7 does not implement std::async <a href="http://gcc.gnu.org/bugzilla/show_bug.cgi?id=51617">as one would expect</a>.
-    Thus, \ref multithreaded "parallel evaluation" will only truly be parallel when the implementation is corrected.
+ - has been tested with Clang 3.4.
 
 In order to be evaluated, the tree must be correctly formed.
-That is, all its branch nodes' children nodes must have been given a value.
+That is, all its leaves must have been given a value.
 
 \section optimizations Optimizations
 
