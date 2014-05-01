@@ -234,12 +234,24 @@ public:
 		return l;
 	}
 
+	//!\brief This branch's left child.
+	virtual node_t* operator-()
+	{
+		return &l;
+	}
+	
 	//!\brief This branch's right child.
 	virtual node_t& right()
 	{
 		return r;
 	}
 
+	//!\brief This branch's right child.
+	virtual node_t* operator+()
+	{
+		return &r;
+	}
+	
 	//! This function is called when anyone of this branch's children is modified.
 	//! This default implementation does nothing when that happens.
 	virtual void grow()
@@ -351,6 +363,14 @@ public:
 		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->left();
 	}
 
+	//!\brief This node's left child.
+	//!
+	//! Note that if this node is a leaf node, behavior is undefined.
+	node_t* operator-()
+	{
+		return -*(dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get()));
+	}
+	
 	//!\brief This node's right child.
 	//!
 	//! Note that if this node is a leaf node, behavior is undefined.
@@ -359,6 +379,14 @@ public:
 		return dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->right();
 	}
 
+	//!\brief This node's right child.
+	//!
+	//! Note that if this node is a leaf node, behavior is undefined.
+	node_t* operator+()
+	{
+		return +*(dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get()));
+	}
+	
 	//!\brief Constness of this node.
 	bool constant() const
 	{

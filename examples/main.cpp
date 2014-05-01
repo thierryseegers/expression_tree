@@ -21,7 +21,7 @@
 using namespace std;
 
 // This function keeps the thread it is run on busy for one second's worth of CPU time.
-// Two implementations are provided, one for Windows, the other for Linux.
+// Implementations are provided for major platforms.
 nullptr_t busy_1_sec(const nullptr_t&, const nullptr_t&)
 {
 #if defined(_WIN32)
