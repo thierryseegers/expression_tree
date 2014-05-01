@@ -1,5 +1,5 @@
 /*
-	(C) Copyright Thierry Seegers 2010-2011. Distributed under the following license:
+	(C) Copyright Thierry Seegers 2010-2014. Distributed under the following license:
 
 	Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -181,6 +181,44 @@ public:
 	}
 };
 
+//!\brief Leaf class specialized to a callable.
+//!
+//! This class stores a pointer to data.
+template<typename T>
+class leaf<T (*)()> : public node_impl<T>
+{
+	std::function<T ()> f;	//!< The callable.
+	
+public:
+	//!\brief Constructor
+	//!
+	//!\param p Pointer to this node's value.
+	leaf(std::function<T ()> f) : f(f) {}
+	
+	//!\brief Copy constructor.
+	leaf(const leaf<T (*)()>& other) : f(other.f) {}
+	
+	virtual ~leaf() {}
+	
+	//!\brief Clones this object.
+	virtual std::unique_ptr<node_impl<T>> clone() const
+	{
+		return std::make_unique<leaf<T (*)()>>(*this);
+	}
+	
+	//! Because this class stores a pointer to its data, it is not constant.
+	virtual bool constant() const
+	{
+		return false;
+	}
+	
+	//! Dereference our pointer.
+	virtual T evaluate() const
+	{
+		return f();
+	}
+};
+
 //!\brief Branch class.
 //!
 //! This class stores an operation and two children nodes.
@@ -336,6 +374,22 @@ public:
 		return *this;
 	}
 
+	//!\brief Assign a callable to this node.
+	//!
+	//! The assignment of a callable designates this node as a leaf node.
+	//! A leaf can still be changed to a branch by assigning an operation to it.
+	node_t& operator=(const std::function<T ()>& f)
+	{
+		impl.reset(new detail::leaf<T (*)()>(f));
+		
+		if(parent)
+		{
+			parent->grow();
+		}
+		
+		return *this;
+	}
+	
 	//!\brief Assign an operation to this node.
 	//!
 	//! The assignment of an operation designates this node as a branch.
