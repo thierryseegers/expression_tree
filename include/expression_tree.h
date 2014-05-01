@@ -62,8 +62,6 @@ struct parallel
 		// Let's not rely on any assumption of parameter evaluation order...
 		T t = r.evaluate();
 
-		f.wait(); // Workaround GCC bug: http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52988
-
 		return o(f.get(), t);
 	}
 };
