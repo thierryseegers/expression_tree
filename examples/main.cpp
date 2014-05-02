@@ -91,7 +91,7 @@ int main()
 	//	 /	 \
 	//	s	(l + r)
 	//		 /   \
-	//		" "  "tree"
+	//	   " "	 "tree"
 
 	string s = "expression";
 
@@ -155,7 +155,7 @@ int main()
 	//
 	//  (l + r)
 	//  /	\
-	// y	  2
+	// y	 2
 
 	int y = 2;
 
@@ -183,7 +183,7 @@ int main()
 	//	  /   \
 	// (l + r)  (l + r)
 	//  /   \	 /   \
-	// y	 2  y	 2
+	// y	 2  y	  2
 
 	tice.right() = n;
 
