@@ -8,107 +8,164 @@
 #include <string>
 
 using namespace expression_tree;
+using namespace std;
 
-TEST_CASE("add/int/2", "Add two integers together.")
+template<typename T, typename F>
+void all_policies(F f)
 {
-	tree<int> t;
-
-	t.root() = std::plus<int>();
-
-	t.root().left() = 0;
-	t.root().right() = 0;
-	REQUIRE(t.evaluate() == std::plus<int>()(0, 0));
-
-	t.root().left() = 2;
-	t.root().right() = 2;
-	REQUIRE(t.evaluate() == std::plus<int>()(2, 2));
-
-	t.root().left() = -1;
-	t.root().right() = 1;
-	REQUIRE(t.evaluate() == std::plus<int>()(-1, 1));
-
-	t.root().left() = std::numeric_limits<int>::max();
-	t.root().right() = std::numeric_limits<int>::max();
-	REQUIRE(t.evaluate() == std::plus<int>()(std::numeric_limits<int>::max(), std::numeric_limits<int>::max()));
+    f(tree<T, no_caching, sequential>());
+    f(tree<T, no_caching, parallel>());
+    
+    f(tree<T, cache_on_evaluation, sequential>());
+    f(tree<T, cache_on_evaluation, parallel>());
+    
+    f(tree<T, cache_on_assignment, sequential>());
+    f(tree<T, cache_on_assignment, parallel>());
 }
 
-TEST_CASE("add/int/4", "Add four integers together.")
+auto single_leaf_int = [](auto&& tree)
 {
-	tree<int> t;
+    tree.root() = 0;
+    REQUIRE(tree.evaluate() == 0);
 
-	t.root() = std::plus<int>();
+    tree.root() = 22;
+    REQUIRE(tree.evaluate() == 22);
 
-	t.root().left() = std::plus<int>();
-	t.root().right() = std::plus<int>();
-	t.root().left().left() = 1;
-	t.root().left().right() = 2;
-	t.root().right().left() = 3;
-	t.root().right().right() = 4;
-	REQUIRE(t.evaluate() == std::plus<int>()(std::plus<int>()(1, 2), std::plus<int>()(3, 4)));
+    tree.root() = numeric_limits<int>::max();
+    REQUIRE(tree.evaluate() == numeric_limits<int>::max());
+};
 
-	t.left() = 1;
-	t.right() = std::plus<int>();
-	t.right().left() = 2;
-	t.right().right() = std::plus<int>();
-	t.right().right().left() = 3;
-	t.right().right().right() = 4;
-	REQUIRE(t.evaluate() == std::plus<int>()(1, std::plus<int>()(2, std::plus<int>()(3, 4))));
-
-	t.right() = 1;
-	t.left() = std::plus<int>();
-	t.left().left() = 2;
-	t.left().right() = std::plus<int>();
-	t.left().right().left() = 3;
-	t.left().right().right() = 4;
-	REQUIRE(t.evaluate() == std::plus<int>()(std::plus<int>()(std::plus<int>()(3, 4), 2), 1));
+TEST_CASE("single_leaf_int", "Evaluate a single int leaf tree.")
+{
+    all_policies<int>(single_leaf_int);
 }
 
-TEST_CASE("add/string/2", "Add two std::strings together.")
+auto single_leaf_string = [](auto&& tree)
 {
-	tree<std::string> t;
+    tree.root() = string();
+    REQUIRE(tree.evaluate() == string());
+    
+    tree.root() = "hello";
+    REQUIRE(tree.evaluate() == "hello");
+};
 
-	t.root() = std::plus<std::string>();
-
-	t.root().left() = std::string();
-	t.root().right() = std::string();
-	REQUIRE(t.evaluate() == std::plus<std::string>()("", ""));
-
-	t.root().left() = std::string(" ");
-	t.root().right() = std::string(" ");
-	REQUIRE(t.evaluate() == std::plus<std::string>()(" ", " "));
-
-	t.root().left() = std::string("apple ");
-	t.root().right() = std::string("pie");
-	REQUIRE(t.evaluate() == std::plus<std::string>()("apple ", "pie"));
+TEST_CASE("single_leaf_string", "Evaluate a single string leaf tree.")
+{
+    all_policies<string>(single_leaf_string);
 }
 
-TEST_CASE("add/string/4", "Add four std::strings together.")
+auto add_two_ints = [](auto&& tree)
 {
-	tree<std::string> t;
+	tree.root() = plus<int>();
 
-	t.root() = std::plus<std::string>();
+	tree.root().left() = 0;
+	tree.root().right() = 0;
+	REQUIRE(tree.evaluate() == plus<int>()(0, 0));
 
-	t.root().left() = std::plus<std::string>();
-	t.root().right() = std::plus<std::string>();
-	t.root().left().left() = std::string("Hello");
-	t.root().left().right() = std::string(", ");
-	t.root().right().left() = std::string("world");
-	t.root().right().right() = std::string("!");
-	REQUIRE(t.evaluate() == std::plus<std::string>()(std::plus<std::string>()("Hello", ", "), std::plus<std::string>()("world", "!")));
+	tree.root().left() = 2;
+	tree.root().right() = 2;
+	REQUIRE(tree.evaluate() == plus<int>()(2, 2));
 
-	t.left() = std::string("Hello");
-	t.right() = std::plus<std::string>();
-	t.right().left() = std::string(", ");
-	t.right().right() = std::plus<std::string>();
-	t.right().right().left() = std::string("world");
-	t.right().right().right() = std::string("!");
-	REQUIRE(t.evaluate() == std::plus<std::string>()("Hello", std::plus<std::string>()(", ", std::plus<std::string>()("world", "!"))));
+	tree.root().left() = -1;
+	tree.root().right() = 1;
+	REQUIRE(tree.evaluate() == plus<int>()(-1, 1));
 
-	t.right() = std::string("!");
-	t.left() = std::plus<std::string>();
-	t.left().left() = std::plus<std::string>();
-	t.left().right() = std::string("world");
-	t.left().left().left() = std::string("Hello");
-	t.left().left().right() = std::string(", ");
-	REQUIRE(t.evaluate() == std::plus<std::string>()(std::plus<std::string>()(std::plus<std::string>()("Hello", ", "), "world"), "!"));
+	tree.root().left() = numeric_limits<int>::max();
+	tree.root().right() = numeric_limits<int>::max();
+	REQUIRE(tree.evaluate() == plus<int>()(numeric_limits<int>::max(), numeric_limits<int>::max()));
+};
+
+TEST_CASE("add_two_ints", "Add two integers together.")
+{
+    all_policies<int>(add_two_ints);
+}
+
+auto add_four_ints = [](auto&& tree)
+{
+	tree.root() = plus<int>();
+
+	tree.root().left() = plus<int>();
+	tree.root().right() = plus<int>();
+	tree.root().left().left() = 1;
+	tree.root().left().right() = 2;
+	tree.root().right().left() = 3;
+	tree.root().right().right() = 4;
+	REQUIRE(tree.evaluate() == plus<int>()(plus<int>()(1, 2), plus<int>()(3, 4)));
+
+	tree.left() = 1;
+	tree.right() = plus<int>();
+	tree.right().left() = 2;
+	tree.right().right() = plus<int>();
+	tree.right().right().left() = 3;
+	tree.right().right().right() = 4;
+	REQUIRE(tree.evaluate() == plus<int>()(1, plus<int>()(2, plus<int>()(3, 4))));
+
+	tree.right() = 1;
+	tree.left() = plus<int>();
+	tree.left().left() = 2;
+	tree.left().right() = plus<int>();
+	tree.left().right().left() = 3;
+	tree.left().right().right() = 4;
+	REQUIRE(tree.evaluate() == plus<int>()(plus<int>()(plus<int>()(3, 4), 2), 1));
+};
+
+TEST_CASE("add_four_ints", "Add four integers together.")
+{
+    all_policies<int>(add_four_ints);
+}
+
+auto add_two_strings = [](auto&& tree)
+{
+	tree.root() = plus<string>();
+
+	tree.root().left() = string();
+	tree.root().right() = string();
+	REQUIRE(tree.evaluate() == plus<string>()("", ""));
+
+	tree.root().left() = string(" ");
+	tree.root().right() = string(" ");
+	REQUIRE(tree.evaluate() == plus<string>()(" ", " "));
+
+	tree.root().left() = string("apple ");
+	tree.root().right() = string("pie");
+	REQUIRE(tree.evaluate() == plus<string>()("apple ", "pie"));
+};
+
+TEST_CASE("add_two_strings", "Add two strings together.")
+{
+    all_policies<string>(add_two_strings);
+}
+
+auto add_four_strings = [](auto&& tree)
+{
+	tree.root() = plus<string>();
+
+	tree.root().left() = plus<string>();
+	tree.root().right() = plus<string>();
+	tree.root().left().left() = string("Hello");
+	tree.root().left().right() = string(", ");
+	tree.root().right().left() = string("world");
+	tree.root().right().right() = string("!");
+	REQUIRE(tree.evaluate() == plus<string>()(plus<string>()("Hello", ", "), plus<string>()("world", "!")));
+
+	tree.left() = string("Hello");
+	tree.right() = plus<string>();
+	tree.right().left() = string(", ");
+	tree.right().right() = plus<string>();
+	tree.right().right().left() = string("world");
+	tree.right().right().right() = string("!");
+	REQUIRE(tree.evaluate() == plus<string>()("Hello", plus<string>()(", ", plus<string>()("world", "!"))));
+
+	tree.right() = string("!");
+	tree.left() = plus<string>();
+	tree.left().left() = plus<string>();
+	tree.left().right() = string("world");
+	tree.left().left().left() = string("Hello");
+	tree.left().left().right() = string(", ");
+	REQUIRE(tree.evaluate() == plus<string>()(plus<string>()(plus<string>()("Hello", ", "), "world"), "!"));
+};
+
+TEST_CASE("add_four_strings", "Add four strings together.")
+{
+    all_policies<string>(add_four_strings);
 }
