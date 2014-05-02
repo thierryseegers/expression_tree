@@ -192,7 +192,7 @@ class leaf<T (*)()> : public node_impl<T>
 public:
 	//!\brief Constructor
 	//!
-	//!\param p Pointer to this node's value.
+	//!\param f The callable of this leaf.
 	leaf(std::function<T ()> f) : f(f) {}
 	
 	//!\brief Copy constructor.
@@ -234,15 +234,18 @@ public:
 	node_t r;	//!< This branch's right child.
 	operation<T> f;	//!< Operation to be applied to this node's children.
 	
+    //!\brief A version of the poor man's tri-state bool.
+    mutable enum constness_e : char { true_, false_, indeterminate } constant_; //!< Caches wether this branch is constant.
+    
 	//!\brief Constructor.
 	//!
 	//!\param f The operation to apply to this branch's children,
 	//!\param l This branch's left child.
 	//!\param r This branch's right child.
-	default_branch(const operation<T>& f, const node_t& l, const node_t& r) : l(l), r(r), f(f) {}
+	default_branch(const operation<T>& f, const node_t& l, const node_t& r) : l(l), r(r), f(f), constant_(indeterminate) {}
 
 	//!\brief Copy constructor.
-	default_branch(const default_branch_t& other) : l(other.l), r(other.r) , f(other.f) {}
+	default_branch(const default_branch_t& other) : l(other.l), r(other.r) , f(other.f), constant_(other.constant_) {}
 	
 	virtual ~default_branch() {}
 
@@ -255,7 +258,12 @@ public:
 	//! The constness of a branch is determined by the constness of its children.
 	virtual bool constant() const override
 	{
-		return l.constant() && r.constant();
+        if(constant_ == indeterminate)
+        {
+            constant_ = (l.constant() && r.constant()) ? true_ : false_;
+        }
+
+		return constant_ == true_;
 	}
 
 	//! Evaluating a branch applies its operation on its children.
@@ -292,6 +300,8 @@ public:
 	//! This default implementation does nothing when that happens.
 	virtual void grow()
 	{
+        constant_ = indeterminate;
+        
 		return;
 	}
 };
@@ -539,6 +549,8 @@ struct cache_on_evaluation
 		//! When this branch grows (e.g. has its children modified), forget that the value was cached.
 		virtual void grow() override
 		{
+            default_branch_t::grow();
+            
 			cached = false;
 		}
 	};
@@ -586,6 +598,8 @@ struct cache_on_assignment
 		//! If they are, perform the operation and cache the value.
 		virtual void grow() override
 		{
+            default_branch_t::grow();
+            
 			if(constant())
 			{
 				// If this node is constant, cache its value now.
