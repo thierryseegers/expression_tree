@@ -23,6 +23,51 @@ void all_policies(F f)
     f(tree<T, cache_on_assignment, parallel>());
 }
 
+auto leaf_kinds = [](auto&& tree)
+{
+	tree.root() = 0;
+    REQUIRE(tree.evaluate() == 0);
+	
+	int x = 22;
+	tree.root() = &x;
+    REQUIRE(tree.evaluate() == x);
+	
+	x = numeric_limits<int>::max();
+	tree.root() = [&x]{ return x; };
+    REQUIRE(tree.evaluate() == x);
+};
+
+TEST_CASE("leaf_kinds", "Evaluate a single int leaf tree.")
+{
+    all_policies<int>(leaf_kinds);
+}
+
+auto node_copy = [](auto&& tree)
+{
+	tree.root() = [](int const& a, int const& b){ return a + b; };
+	
+	tree.left() = 1;
+	tree.right() = tree.left();
+	REQUIRE(tree.evaluate() == 2);
+	
+	tree.left() = tree.root();
+	REQUIRE(tree.evaluate() == 3);
+	
+	tree.left().left() = tree.left();
+	REQUIRE(tree.evaluate() == 4);
+	
+	tree.left() = tree.left().left();
+	REQUIRE(tree.evaluate() == 3);
+	
+	tree.left() = tree.right();
+	REQUIRE(tree.evaluate() == 2);
+};
+
+TEST_CASE("node_copy", "Grow and prune a tree by copying branches and leaves.")
+{
+    all_policies<int>(node_copy);
+}
+
 auto single_leaf_int = [](auto&& tree)
 {
     tree.root() = 0;

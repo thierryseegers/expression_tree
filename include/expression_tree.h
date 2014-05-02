@@ -127,7 +127,7 @@ public:
 	//!\brief Clones this object.
 	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
-		return std::unique_ptr<leaf<T>>(new leaf<T>(*this));
+		return std::make_unique<leaf<T>>(*this);
 	}
 
 	//! Because this classes stores a copy of its data, it is constant.
@@ -165,7 +165,7 @@ public:
 	//!\brief Clones this object.
 	virtual std::unique_ptr<node_impl<T>> clone() const override
 	{
-		return std::unique_ptr<leaf<T*>>(new leaf<T*>(*this));
+		return std::make_unique<leaf<T*>>(*this);
 	}
 
 	//! Because this class stores a pointer to its data, it is not constant.
@@ -249,12 +249,6 @@ public:
 	
 	virtual ~default_branch() {}
 
-	//!\brief Clones this object.
-	virtual std::unique_ptr<node_impl<T>> clone() const override
-	{
-		return std::make_unique<default_branch_t>(*this);
-	}
-
 	//! The constness of a branch is determined by the constness of its children.
 	virtual bool constant() const override
 	{
@@ -298,7 +292,7 @@ public:
 	
 	//! This function is called when anyone of this branch's children is modified.
 	//! This default implementation does nothing when that happens.
-	virtual void grow()
+	virtual void modified()
 	{
         constant_ = indeterminate;
         
@@ -338,11 +332,15 @@ public:
 		if(this != &other)
 		{
 			impl = other.impl->clone();
-			parent = other.parent;
+			if(auto p = dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get()))
+			{
+				p->left().parent = this;
+				p->right().parent = this;
+			}
 
 			if(parent)
 			{
-				parent->grow();
+				parent->modified();
 			}
 		}
 
@@ -362,7 +360,7 @@ public:
 
 		if(parent)
 		{
-			parent->grow();
+			parent->modified();
 		}
 
 		return *this;
@@ -378,7 +376,7 @@ public:
 
 		if(parent)
 		{
-			parent->grow();
+			parent->modified();
 		}
 
 		return *this;
@@ -394,7 +392,7 @@ public:
 		
 		if(parent)
 		{
-			parent->grow();
+			parent->modified();
 		}
 		
 		return *this;
@@ -411,7 +409,7 @@ public:
 
 		if(parent)
 		{
-			parent->grow();
+			parent->modified();
 		}
 
 		return *this;
@@ -464,13 +462,13 @@ public:
 	//!\brief Called when this node is assigned to.
 	//!
 	//! Recursively notifies parent nodes of the growth that happened.
-	void grow()
+	void modified()
 	{
-		dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->grow();
+		dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get())->modified();
 
 		if(parent)
 		{
-			parent->grow();
+			parent->modified();
 		}
 	}
 };
@@ -496,6 +494,12 @@ struct no_caching
 		branch(const branch& o) : default_branch_t(o) {}
 
 		virtual ~branch() {}
+		
+		//!\brief Clones this object.
+		virtual std::unique_ptr<detail::node_impl<T>> clone() const override
+		{
+			return std::make_unique<branch>(*this);
+		}
 	};
 };
 
@@ -529,6 +533,12 @@ struct cache_on_evaluation
 
 		virtual ~branch() {}
 
+		//!\brief Clones this object.
+		virtual std::unique_ptr<detail::node_impl<T>> clone() const override
+		{
+			return std::make_unique<branch>(*this);
+		}
+
 		//! If the value of this branch has been cached already, return it.
 		//! Otherwise, evaluate it and determine if this branch is constant.
 		//! If it is, considered the value as cached to re-use later.
@@ -547,9 +557,9 @@ struct cache_on_evaluation
 		}
 
 		//! When this branch grows (e.g. has its children modified), forget that the value was cached.
-		virtual void grow() override
+		virtual void modified() override
 		{
-            default_branch_t::grow();
+            default_branch_t::modified();
             
 			cached = false;
 		}
@@ -586,6 +596,12 @@ struct cache_on_assignment
 
 		virtual ~branch() {}
 
+		//!\brief Clones this object.
+		virtual std::unique_ptr<detail::node_impl<T>> clone() const override
+		{
+			return std::make_unique<branch>(*this);
+		}
+
 		//! If the value of this branch has been cached already, return it.
 		virtual T evaluate() const override
 		{
@@ -596,9 +612,9 @@ struct cache_on_assignment
 		
 		//! When this branch has its children modified, check if they are constant.
 		//! If they are, perform the operation and cache the value.
-		virtual void grow() override
+		virtual void modified() override
 		{
-            default_branch_t::grow();
+            default_branch_t::modified();
             
 			if(constant())
 			{
