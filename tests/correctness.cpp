@@ -47,20 +47,24 @@ auto node_copy = [](auto&& tree)
 	tree.root() = [](int const& a, int const& b){ return a + b; };
 	
 	tree.left() = 1;
+	
 	tree.right() = tree.left();
 	REQUIRE(tree.evaluate() == 2);
 	
 	tree.left() = tree.root();
 	REQUIRE(tree.evaluate() == 3);
 	
-	tree.left().left() = tree.left();
+	tree.left() = tree.root();
 	REQUIRE(tree.evaluate() == 4);
 	
-	tree.left() = tree.left().left();
+	tree.left().left() = tree.left().left().left();
 	REQUIRE(tree.evaluate() == 3);
-	
-	tree.left() = tree.right();
+
+	tree.left() = tree.left().left();
 	REQUIRE(tree.evaluate() == 2);
+
+	tree.root() = tree.left();
+	REQUIRE(tree.evaluate() == 1);
 };
 
 TEST_CASE("node_copy", "Grow and prune a tree by copying branches and leaves.")

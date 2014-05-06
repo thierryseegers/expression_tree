@@ -312,9 +312,9 @@ struct no_caching;
 template<typename T, template<typename, typename> class CachingPolicy = no_caching, class ThreadingPolicy = sequential>
 class node
 {
-	using node_t = node<T, CachingPolicy, ThreadingPolicy>;						//!< Convenience alias.
+	using node_t = node<T, CachingPolicy, ThreadingPolicy>;	//!< Convenience alias.
 
-	std::unique_ptr<detail::node_impl<T>> impl;		//!< Follows the pimpl idiom.
+	std::unique_ptr<detail::node_impl<T>> impl;	//!< Follows the pimpl idiom.
 	node_t *parent; //!< This node's parent. Ends up unused when no caching occurs.
 
 public:
@@ -334,8 +334,7 @@ public:
 			impl = other.impl->clone();
 			if(auto p = dynamic_cast<typename CachingPolicy<T, ThreadingPolicy>::branch*>(impl.get()))
 			{
-				p->left().parent = this;
-				p->right().parent = this;
+				p->left().parent = p->right().parent = this;
 			}
 
 			if(parent)
